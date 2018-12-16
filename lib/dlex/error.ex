@@ -1,4 +1,7 @@
 defmodule Dlex.Error do
+  @moduledoc """
+  Dgraph or connection error are wrapped in Dlex.Error.
+  """
   defexception [:reason, :action]
 
   @type t :: %Dlex.Error{}

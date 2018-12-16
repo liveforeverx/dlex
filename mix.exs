@@ -7,7 +7,9 @@ defmodule Dlex.MixProject do
       version: "0.1.0",
       elixir: "~> 1.7",
       start_permanent: Mix.env() == :prod,
-      deps: deps()
+      deps: deps(),
+      description: description(),
+      package: package()
     ]
   end
 
@@ -26,7 +28,21 @@ defmodule Dlex.MixProject do
       {:grpc, "~> 0.3.1"},
       {:gun, "1.3.0"},
       {:jason, "~> 1.0", optional: true},
-      {:protobuf, "~> 0.5"}
+      {:protobuf, "~> 0.5"},
+      {:earmark, "~> 1.0", only: :dev},
+      {:ex_doc, "~> 0.19", only: :dev}
+    ]
+  end
+
+  defp description do
+    "Dlex is a gRPC based client for the Dgraph database."
+  end
+
+  defp package do
+    [
+      maintainers: ["Dmitry Russ(Aleksandrov)"],
+      licenses: ["Apache 2.0"],
+      links: %{"Github" => "https://github.com/liveforeverx/dlex"}
     ]
   end
 end

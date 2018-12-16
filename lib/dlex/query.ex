@@ -1,10 +1,5 @@
 defmodule Dlex.Query do
-  @moduledoc """
-  Query struct.
-
-  Its public fields are:
-
-  """
+  @moduledoc false
 
   @type t :: %__MODULE__{
           type: Diex.Type.Alter | Diex.Type.Mutation | Diex.Type.Query,

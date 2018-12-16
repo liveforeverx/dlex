@@ -71,7 +71,7 @@ which json adapter to use. Less dependencies.
 It seems for me more natural to have API names more or less matching to actual query names.
 
 For example `Dlex.mutate()` instead of `ExDgraph.set_map` for json-based mutations. Actually `Dlex.mutate` infers
-from data.
+type (json or nquads) from passed data to a function.
 
 ## License
 

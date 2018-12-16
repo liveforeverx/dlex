@@ -1,9 +1,5 @@
 defmodule Dlex.Type do
-  @moduledoc """
-  Behaviour for handling requests of specific types, which abstracts different queries, but
-  additionally combines it with execution logic, what should make it easier to extend on other
-  request types.
-  """
+  @moduledoc false
 
   @callback describe(Dlex.Query.t(), Keyword.t()) :: Dlex.Query.t()
   @callback encode(Dlex.Query.t(), map, Keyword.t()) :: struct

@@ -1,8 +1,5 @@
 defmodule Dlex.Protocol do
-  @moduledoc """
-  Implements callback for DBConnection behaviour and is main point of interfacing with connection
-  process.
-  """
+  @moduledoc false
 
   alias GRPC.Stub
   alias Dlex.{Error, Type, Query}
