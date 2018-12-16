@@ -62,8 +62,7 @@ protoc --elixir_out=plugins=grpc:. lib/api.proto
 
 ## Credits
 
-Inspired by [exdgraph](https://github.com/ospaarmann/exdgraph), but as I saw too many parts for changes, so it was
-easier to start from scratch with goals: small codebase, natural abstraction, efficient, less opionated.
+Inspired by [exdgraph](https://github.com/ospaarmann/exdgraph), but as I saw too many parts for changes or parts, which I would like to have complettly different, so that it was easier to start from scratch with goals: small codebase, small natural abstraction, efficient, less opionated, less dependencies.
 
 So you can choose freely, which pool implementation to use (poolboy or db_connection intern pool implementation),
 which json adapter to use. Less dependencies.
