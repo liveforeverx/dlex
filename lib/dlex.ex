@@ -76,6 +76,7 @@ defmodule Dlex do
   """
   @spec child_spec(Keyword.t()) :: Supervisor.Spec.spec()
   def child_spec(opts) do
+    opts = default_opts(opts)
     DBConnection.child_spec(Dlex.Protocol, opts)
   end
 

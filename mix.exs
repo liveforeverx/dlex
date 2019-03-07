@@ -4,7 +4,7 @@ defmodule Dlex.MixProject do
   def project do
     [
       app: :dlex,
-      version: "0.1.0",
+      version: "0.1.1",
       elixir: "~> 1.7",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
@@ -16,8 +16,7 @@ defmodule Dlex.MixProject do
   # Run "mix help compile.app" to learn about applications.
   def application do
     [
-      extra_applications: [:logger],
-      mod: {Dlex.Application, []}
+      extra_applications: [:logger]
     ]
   end
 
@@ -30,6 +29,7 @@ defmodule Dlex.MixProject do
       {:jason, "~> 1.0", optional: true},
       {:protobuf, "~> 0.5"},
       {:earmark, "~> 1.0", only: :dev},
+      {:exrun, "~> 0.1.0", only: :dev},
       {:ex_doc, "~> 0.19", only: :dev}
     ]
   end
