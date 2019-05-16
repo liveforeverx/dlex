@@ -23,6 +23,8 @@ defmodule Dlex do
     * `:hostname` - Server hostname (default: DGRAPH_HOST, than `localhost`)
     * `:port` - Server port (default: DGRAPH_PORT env var, then 3306)
     * `:keepalive` - Keepalive option for http client (default: `:infinity`)
+    * `:json_library` - Specifies json library to use (default: `Jason`)
+    * `:timeout` - Request timeout in milliseconds (default: `#{@timeout}`);
 
   ### SSL/TLS configuration (automaticly enabled, if required files provided)
 
@@ -64,7 +66,10 @@ defmodule Dlex do
     |> Keyword.put_new(:keepalive, @default_keepalive)
     |> Keyword.put_new(:idle_interval, @idle_interval)
     |> Keyword.update!(:port, &to_integer/1)
+    |> Keyword.put_new_lazy(:json_library, fn -> json_library() end)
   end
+
+  defp json_library(), do: Application.get_env(:dlex, :json_library, Jason)
 
   defp to_integer(port) when is_binary(port), do: String.to_integer(port)
   defp to_integer(port) when is_integer(port), do: port

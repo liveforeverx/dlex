@@ -8,7 +8,7 @@ defmodule Dlex.Type.Query do
   @behaviour Dlex.Type
 
   @impl true
-  def execute(channel, request), do: ApiStub.query(channel, request)
+  def execute(channel, request, opts), do: ApiStub.query(channel, request, opts)
 
   @impl true
   def describe(query, _opts), do: query
@@ -23,7 +23,7 @@ defmodule Dlex.Type.Query do
     Enum.map(schema, &Map.delete(&1, :__struct__))
   end
 
-  def decode(_, %Response{json: json, txn: %TxnContext{aborted: false} = _txn}, _) do
-    Query.json_adapter().decode!(json)
+  def decode(%{json: json_lib}, %Response{json: json, txn: %TxnContext{aborted: false} = _txn}, _) do
+    json_lib.decode!(json)
   end
 end

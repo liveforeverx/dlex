@@ -8,7 +8,7 @@ defmodule Dlex.Type.Mutation do
   @behaviour Dlex.Type
 
   @impl true
-  def execute(channel, request), do: ApiStub.mutate(channel, request)
+  def execute(channel, request, opts), do: ApiStub.mutate(channel, request, opts)
 
   @impl true
   def describe(%Query{statement: statement} = query, opts) do
@@ -41,11 +41,11 @@ defmodule Dlex.Type.Mutation do
   defp add_blank_ids(value, counter), do: {value, counter}
 
   @impl true
-  def encode(query, _parameters, _opts) do
+  def encode(%{json: json} = query, _parameters, _opts) do
     %Query{sub_type: sub_type, statement: statement, txn_context: txn} = query
     {commit, start_ts} = transaction_opts(txn)
     mutation_type = infer_type(statement)
-    statement = format(mutation_type, statement)
+    statement = format(mutation_type, statement, json)
     mutation_key = mutation_key(mutation_type, sub_type)
     mutation = [{mutation_key, statement} | [start_ts: start_ts, commit_now: commit]]
     Mutation.new(mutation)
@@ -58,8 +58,8 @@ defmodule Dlex.Type.Mutation do
   defp infer_type([%{} | _]), do: :json
   defp infer_type(_), do: :nquads
 
-  defp format(:nquads, statement), do: statement
-  defp format(:json, statement), do: Query.json_adapter().encode!(statement)
+  defp format(:nquads, statement, _), do: statement
+  defp format(:json, statement, json_lib), do: json_lib.encode!(statement)
 
   defp mutation_key(:json, nil), do: :set_json
   defp mutation_key(:nquads, nil), do: :set_nquads

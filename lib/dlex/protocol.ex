@@ -10,17 +10,18 @@ defmodule Dlex.Protocol do
 
   require Logger
 
-  defstruct [:channel, :connected, :opts, :txn_context, txn_aborted?: false]
+  defstruct [:channel, :connected, :opts, :txn_context, :json, txn_aborted?: false]
 
   @impl true
   def connect(opts) do
-    host = opts[:hostname]
-    port = opts[:port]
+    host = Keyword.fetch!(opts, :hostname)
+    port = Keyword.fetch!(opts, :port)
+    json_lib = Keyword.fetch!(opts, :json_library)
 
     case gen_stub_options(opts) do
       {:ok, stub_opts} ->
         case Stub.connect("#{host}:#{port}", stub_opts) do
-          {:ok, channel} -> {:ok, %__MODULE__{channel: channel, opts: opts}}
+          {:ok, channel} -> {:ok, %__MODULE__{channel: channel, json: json_lib, opts: opts}}
           {:error, reason} -> {:error, %Error{action: :connect, reason: reason}}
         end
 
@@ -80,7 +81,7 @@ defmodule Dlex.Protocol do
 
   @impl true
   def disconnect(_error, _state) do
-    nil
+    :ok
   end
 
   ## Transaction API
@@ -106,26 +107,29 @@ defmodule Dlex.Protocol do
       {:ok, txn} ->
         {:ok, txn, state}
 
-      {:error, error} ->
-        {:error, %Error{action: txn_result, reason: error}, state}
+      {:error, reason} ->
+        {state_on_error(reason), %Error{action: txn_result, reason: reason}, state}
     end
   end
 
   ## Query API
 
   @impl true
-  def handle_prepare(query, _opts, %{txn_context: txn_context} = state) do
-    {:ok, %{query | txn_context: txn_context}, state}
+  def handle_prepare(query, _opts, %{json: json_lib, txn_context: txn_context} = state) do
+    {:ok, %{query | json: json_lib, txn_context: txn_context}, state}
   end
 
   @impl true
-  def handle_execute(%Query{} = query, request, _opts, %{channel: channel} = state) do
-    case Type.execute(channel, query, request) do
+  def handle_execute(%Query{} = query, request, _opts, %{channel: channel, opts: opts} = state) do
+    timeout = Keyword.fetch!(opts, :timeout)
+
+    case Type.execute(channel, query, request, timeout: timeout) do
       {:ok, result} ->
         {:ok, query, result, check_txn(state, result)}
 
-      {:error, error} ->
-        {:error, %Error{action: :execute, reason: error}, check_abort(state, error)}
+      {:error, reason} ->
+        error = %Error{action: :execute, reason: reason}
+        {state_on_error(reason), error, check_abort(state, reason)}
     end
   end
 
@@ -181,17 +185,21 @@ defmodule Dlex.Protocol do
   ## handle other messages
 
   def handle_info({:gun_up, _pid, _protocol}, state) do
-    Logger.debug("dix received gun_up")
+    Logger.debug("dlex received gun_up")
     {:ok, %__MODULE__{state | connected: true}}
   end
 
   def handle_info({:gun_down, _pid, _protocol, _level, _, _}, state) do
-    Logger.debug("dix received gun_down")
+    Logger.debug("dlex received gun_down")
     {:ok, %__MODULE__{state | connected: false}}
   end
 
   def handle_info(msg, state) do
-    Logger.error(fn -> ["dix received unexpected message: ", inspect(msg)] end)
+    Logger.warn(fn -> ["dix received unexpected message: ", inspect(msg)] end)
     {:ok, state}
   end
+
+  defp state_on_error(%GRPC.RPCError{message: ":noproc"}), do: :disconnect
+  defp state_on_error(%GRPC.RPCError{message: ":shutdown" <> _}), do: :disconnect
+  defp state_on_error(_), do: :error
 end

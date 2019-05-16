@@ -7,7 +7,7 @@ defmodule Dlex.Type.Operation do
   @behaviour Dlex.Type
 
   @impl true
-  def execute(channel, request), do: ApiStub.alter(channel, request)
+  def execute(channel, request, opts), do: ApiStub.alter(channel, request, opts)
 
   @impl true
   def describe(%{statement: statement} = query, _opts) do

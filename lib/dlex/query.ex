@@ -7,18 +7,14 @@ defmodule Dlex.Query do
           statement: map | String.t(),
           parameters: any,
           txn_context: Diex.Api.TxnContext.t(),
-          request: nil
+          json: atom,
+          request: any
         }
 
-  defstruct [:type, :sub_type, :statement, :parameters, :request, :txn_context]
+  defstruct [:type, :sub_type, :statement, :parameters, :json, :request, :txn_context]
 
   @type request :: any
   @callback request(t) :: request
-
-  @doc """
-  Get json adapter
-  """
-  def json_adapter(), do: Application.get_env(:dlex, :json_adapter, Jason)
 end
 
 defimpl DBConnection.Query, for: Dlex.Query do
