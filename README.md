@@ -2,8 +2,8 @@
 
 Dlex is a gRPC based client for the [Dgraph](https://github.com/dgraph-io/dgraph) database in Elixir. It uses the [DBConnection](https://hexdocs.pm/db_connection/DBConnection.html) behaviour to support transactions and connection pooling.
 
-Small, efficient codebase. Aims for a full dgraph support. Supports transactions (starting from dgraph version: `1.0.9`),
-delete mutations and low-level parameterized queries. DSL is a planned.
+Small, efficient codebase. Aims for a full Dgraph support. Supports transactions (starting from Dgraph version: `1.0.9`),
+delete mutations and low-level parameterized queries. DSL is planned.
 
 ## Installation
 
@@ -62,15 +62,15 @@ protoc --elixir_out=plugins=grpc:. lib/api.proto
 
 ## Credits
 
-Inspired by [exdgraph](https://github.com/ospaarmann/exdgraph), but as I saw too many parts for changes or parts, which I would like to have complettly different, so that it was easier to start from scratch with goals: small codebase, small natural abstraction, efficient, less opionated, less dependencies.
+Inspired by [exdgraph](https://github.com/ospaarmann/exdgraph), but as I saw too many parts for changes or parts, which I would like to have completely different, so that it was easier to start from scratch with these goals: small codebase, small natural abstraction, efficient, less opionated, less dependencies.
 
-So you can choose freely, which pool implementation to use (poolboy or db_connection intern pool implementation),
-which json adapter to use. Less dependencies.
+So you can choose freely which pool implementation to use (poolboy or db_connection intern pool implementation) or
+which JSON adapter to use. Fewer dependencies.
 
-It seems for me more natural to have API names more or less matching to actual query names.
+It seems for me more natural to have API names more or less matching actual query names.
 
-For example `Dlex.mutate()` instead of `ExDgraph.set_map` for json-based mutations. Actually `Dlex.mutate` infers
-type (json or nquads) from passed data to a function.
+For example `Dlex.mutate()` instead of `ExDgraph.set_map` for JSON-based mutations. Actually, `Dlex.mutate` infers
+the type (JSON or nquads) from data passed to a function.
 
 ## License
 
