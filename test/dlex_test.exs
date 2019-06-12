@@ -25,7 +25,7 @@ defmodule DlexTest do
   """
 
   test "mutation json", %{pid: pid} do
-    assert {:ok, uids} = Dlex.mutate(pid, @mutation_json)
+    assert {:ok, uids} = Dlex.set(pid, @mutation_json)
     assert 3 == map_size(uids)
 
     assert %{
@@ -70,6 +70,19 @@ defmodule DlexTest do
     assert %{"uid" => ^uid} = get_by_name(pid, "deletion_test")
     assert Dlex.delete!(pid, %{"uid" => uid})
     assert %{"all" => []} = get_by_name(pid, "deletion_test")
+  end
+
+  test "schema modification with map", %{pid: pid} do
+    surname_predicate = %{
+      "index" => true,
+      "predicate" => "surname",
+      "tokenizer" => ["term", "fulltext"],
+      "type" => "string"
+    }
+
+    Dlex.alter!(pid, %{schema: surname_predicate})
+    {:ok, %{"schema" => schema}} = Dlex.query_schema(pid)
+    assert surname_predicate == Enum.find(schema, &(&1["predicate"] == "surname"))
   end
 
   def uid_get(conn, uid) do

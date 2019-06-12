@@ -29,6 +29,7 @@ defmodule Dlex.MixProject do
       {:jason, "~> 1.0", optional: true},
       {:protobuf, "~> 0.5"},
       {:earmark, "~> 1.0", only: :dev},
+      {:ecto, "~> 3.1", optional: true},
       {:exrun, "~> 0.1.0", only: :dev},
       {:ex_doc, "~> 0.19", only: :dev}
     ]

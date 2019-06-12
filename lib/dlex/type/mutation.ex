@@ -1,7 +1,7 @@
 defmodule Dlex.Type.Mutation do
   @moduledoc false
 
-  alias Dlex.Query
+  alias Dlex.{Query, Utils}
   alias Dlex.Api.{Assigned, Mutation}
   alias Dlex.Api.Dgraph.Stub, as: ApiStub
 
@@ -12,33 +12,9 @@ defmodule Dlex.Type.Mutation do
 
   @impl true
   def describe(%Query{statement: statement} = query, opts) do
-    statement = if opts[:return_json], do: add_blank_ids(statement), else: statement
+    statement = if opts[:return_json], do: Utils.add_blank_ids(statement), else: statement
     %Query{query | statement: statement}
   end
-
-  ## Add temporary blank ids to json object
-  defp add_blank_ids(statement), do: statement |> add_blank_ids(0) |> elem(0)
-
-  defp add_blank_ids(list, counter) when is_list(list) do
-    {list, counter} =
-      Enum.reduce(list, {[], counter}, fn map, {acc, counter} ->
-        {map, counter} = add_blank_ids(map, counter)
-        {[map | acc], counter}
-      end)
-
-    {Enum.reverse(list), counter}
-  end
-
-  defp add_blank_ids(map, counter) when is_map(map) do
-    map = Map.update(map, "uid", "_:#{counter}", & &1)
-
-    Enum.reduce(map, {%{}, counter + 1}, fn {key, value}, {map, counter} ->
-      {value, counter} = add_blank_ids(value, counter)
-      {Map.put(map, key, value), counter}
-    end)
-  end
-
-  defp add_blank_ids(value, counter), do: {value, counter}
 
   @impl true
   def encode(%{json: json} = query, _parameters, _opts) do
@@ -68,18 +44,6 @@ defmodule Dlex.Type.Mutation do
 
   @impl true
   def decode(%Query{statement: statement} = _query, %Assigned{uids: uids} = _result, opts) do
-    if opts[:return_json], do: replace_ids(statement, uids), else: uids
+    if opts[:return_json], do: Utils.replace_ids(statement, uids), else: uids
   end
-
-  ## Replace temporary blank ids to real ids
-
-  defp replace_ids(json, uids) when is_list(json), do: Enum.map(json, &replace_ids(&1, uids))
-
-  defp replace_ids(map, uids) when is_map(map),
-    do: Enum.reduce(map, %{}, &replace_kv(&1, &2, uids))
-
-  defp replace_ids(value, _uids), do: value
-
-  defp replace_kv({"uid", "_:" <> blank_id}, map, uids), do: Map.put(map, "uid", uids[blank_id])
-  defp replace_kv({key, value}, map, uids), do: Map.put(map, key, replace_ids(value, uids))
 end

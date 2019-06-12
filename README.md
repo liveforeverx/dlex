@@ -1,6 +1,8 @@
 # Dlex
 
-Dlex is a gRPC based client for the [Dgraph](https://github.com/dgraph-io/dgraph) database in Elixir. It uses the [DBConnection](https://hexdocs.pm/db_connection/DBConnection.html) behaviour to support transactions and connection pooling.
+Dlex is a gRPC based client for the [Dgraph](https://github.com/dgraph-io/dgraph) database in Elixir.
+It uses the [DBConnection](https://hexdocs.pm/db_connection/DBConnection.html) behaviour to support
+transactions and connection pooling.
 
 Small, efficient codebase. Aims for a full Dgraph support. Supports transactions (starting from Dgraph version: `1.0.9`),
 delete mutations and low-level parameterized queries. DSL is planned.
@@ -33,6 +35,24 @@ Dlex.mutate(conn, ~s|_:foo <name> "Bar" .|) # or in nquads format
 by_name = "query by_name($name: string) {by_name(func: eq(name, $name)) {uid expand(_all_)}}"
 Dlex.query(conn, by_name, %{"$name" => "Betty"})
 Dlex.delete(conn, %{"uid" => uid}) # delete Alice node
+```
+
+### Alter schema
+
+Modification of schema supported with string and map form (which is returned by `query_schema`):
+
+```
+Dlex.alter(conn, "name: string @index(term, fulltext, trigram) @lang .")
+# equivalent to in map form
+Dlex.alter(conn, %{
+  schema: %{
+    "predicate" => "name",
+    "type" => "string",
+    "index" => true,
+    "lang" => true,
+    "tokenizer" => ["term", "fulltext", "trigram"]
+  }
+})
 ```
 
 ## Developers guide

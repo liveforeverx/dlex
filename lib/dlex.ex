@@ -21,7 +21,7 @@ defmodule Dlex do
   ## Options
 
     * `:hostname` - Server hostname (default: DGRAPH_HOST, than `localhost`)
-    * `:port` - Server port (default: DGRAPH_PORT env var, then 3306)
+    * `:port` - Server port (default: DGRAPH_PORT env var, then 9080)
     * `:keepalive` - Keepalive option for http client (default: `:infinity`)
     * `:json_library` - Specifies json library to use (default: `Jason`)
     * `:timeout` - Request timeout in milliseconds (default: `#{@timeout}`);
@@ -113,6 +113,18 @@ defmodule Dlex do
   end
 
   @doc """
+  See `mutate/3` for documentation.
+  """
+  @spec set(conn, iodata | map, Keyword.t()) :: {:ok, map} | {:error, Dlex.Error.t() | term}
+  def set(conn, statement, opts \\ []), do: mutate(conn, statement, opts)
+
+  @doc """
+  See `mutate!/3` for documentation.
+  """
+  @spec set!(conn, iodata | map, Keyword.t()) :: map
+  def set!(conn, statement, opts \\ []), do: mutate!(conn, statement, opts)
+
+  @doc """
   Send mutation to dgraph
 
   Options:
@@ -144,7 +156,7 @@ defmodule Dlex do
        }}
 
   """
-  @spec mutate(conn, iodata, Keyword.t()) :: {:ok, map} | {:error, Dlex.Error.t() | term}
+  @spec mutate(conn, iodata | map, Keyword.t()) :: {:ok, map} | {:error, Dlex.Error.t() | term}
   def mutate(conn, statement, opts \\ []) do
     query = %Query{type: Type.Mutation, statement: statement}
 
@@ -156,7 +168,7 @@ defmodule Dlex do
   Runs a mutation and returns the result or raises `Dlex.Error` if there was an error.
   See `mutate/3`.
   """
-  @spec mutate!(conn, iodata, Keyword.t()) :: map
+  @spec mutate!(conn, iodata | map, Keyword.t()) :: map
   def mutate!(conn, statement, opts \\ []) do
     case mutate(conn, statement, opts) do
       {:ok, result} -> result
@@ -197,7 +209,7 @@ defmodule Dlex do
        }}
 
   """
-  @spec delete(conn, iodata, Keyword.t()) :: {:ok, map} | {:error, Dlex.Error.t() | term}
+  @spec delete(conn, iodata | map, Keyword.t()) :: {:ok, map} | {:error, Dlex.Error.t() | term}
   def delete(conn, statement, opts \\ []) do
     query = %Query{type: Type.Mutation, sub_type: :deletion, statement: statement}
 
@@ -209,7 +221,7 @@ defmodule Dlex do
   Runs a mutation with delete target and returns the result or raises `Dlex.Error` if there was
   an error. See `delete/3`.
   """
-  @spec delete!(conn, iodata, Keyword.t()) :: map
+  @spec delete!(conn, iodata | map, Keyword.t()) :: map | no_return
   def delete!(conn, statement, opts \\ []) do
     case delete(conn, statement, opts) do
       {:ok, result} -> result
@@ -245,7 +257,7 @@ defmodule Dlex do
   Runs a query and returns the result or raises `Dlex.Error` if there was an error.
   See `query/3`.
   """
-  @spec query!(conn, iodata, map, Keyword.t()) :: map
+  @spec query!(conn, iodata, map, Keyword.t()) :: map | no_return
   def query!(conn, statement, parameters \\ %{}, opts \\ []) do
     case query(conn, statement, parameters, opts) do
       {:ok, result} -> result
@@ -258,6 +270,12 @@ defmodule Dlex do
   """
   @spec query_schema(conn) :: {:ok, map} | {:error, Dlex.Error.t() | term}
   def query_schema(conn), do: query(conn, "schema {}")
+
+  @doc """
+  Query schema of dgraph
+  """
+  @spec query_schema!(conn) :: map | no_return
+  def query_schema!(conn), do: query!(conn, "schema {}")
 
   @doc """
   Execute serie of queries and mutations in a transactions
