@@ -1,0 +1,105 @@
+defmodule Dlex.Adapters.GRPC do
+  use Dlex.Adapter
+
+  alias GRPC.Stub
+  alias Dlex.Api.Dgraph.Stub, as: ApiStub
+  alias Dlex.Error
+
+  require Logger
+
+  defp gen_stub_options(opts) do
+    adapter_opts = %{http2_opts: %{keepalive: opts[:keepalive]}}
+    stub_opts = [adapter_opts: adapter_opts]
+
+    case gen_ssl_config(opts) do
+      {:ok, nil} -> {:ok, stub_opts}
+      {:ok, ssl_config} -> Keyword.put(stub_opts, :cred, GRPC.Credential.new(ssl: ssl_config))
+      {:error, error} -> {:error, error}
+    end
+  end
+
+  defp gen_ssl_config(opts) do
+    case opts[:cacertfile] do
+      nil ->
+        {:ok, nil}
+
+      cacertfile ->
+        with {:ok, tls_config} <- check_tls(opts) do
+          ssl_config = [{:cacertfile, cacertfile} | tls_config]
+          ssl_config = for {key, value} <- ssl_config, do: {key, to_charlist(value)}
+          {:ok, ssl_config}
+        end
+    end
+  end
+
+  defp check_tls(opts) do
+    case {opts[:certfile], opts[:keyfile]} do
+      {nil, nil} -> {:ok, []}
+      {_, nil} -> {:error, %Error{action: :connect, reason: {:not_provided, :keyfile}}}
+      {nil, _} -> {:error, %Error{action: :connect, reason: {:not_provided, :certfile}}}
+      {certfile, keyfile} -> {:ok, [certfile: certfile, keyfile: keyfile]}
+    end
+  end
+
+  # -------
+  # Implementation
+  # -------
+
+  @impl true
+  def connect(address, opts \\ []) do
+    case gen_stub_options(opts) do
+      {:ok, stub_opts} -> Stub.connect(address, stub_opts)
+      {:error, error} -> {:error, error}
+    end
+  end
+
+  @impl true
+  def disconnect(channel) do
+    case Stub.disconnect(channel) do
+      {:ok, _} -> :ok
+      {:error, reason} -> :ok
+    end
+  end
+
+  @impl true
+  def ping(channel) do
+    # check if the server is up and wait 5s seconds before disconnect
+    pid = channel.adapter_payload.conn_pid
+    stream = :gun.head(pid, "/")
+    response = :gun.await(pid, stream, 5_000)
+
+    # return based on response
+    case response do
+      {:response, :fin, 200, _} ->
+        Logger.debug(fn -> ":gun.await_up == :ok" end)
+        :ok
+
+      {:error, reason} ->
+        Logger.debug(fn -> ":gun.await_up == :error, #{inspect(reason)}" end)
+        {:disconnect, reason}
+
+      _ ->
+        :ok
+    end
+  end
+
+  @impl true
+  def alter(channel, request, request_options) do
+    ApiStub.alter(channel, request, request_options)
+  end
+
+  @impl true
+  def mutate(channel, request, request_options) do
+    ApiStub.mutate(channel, request, request_options)
+  end
+
+  @impl true
+  def query(channel, request, request_options) do
+    ApiStub.query(channel, request, request_options)
+  end
+
+  @impl true
+  def commit_or_abort(channel, transaction, request_options) do
+    ApiStub.commit_or_abort(channel, transaction, request_options)
+  end
+end

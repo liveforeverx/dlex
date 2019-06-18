@@ -23,9 +23,10 @@ defmodule Dlex.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      {:db_connection, "~> 2.0"},
+      {:db_connection, "~> 2.1"},
+      {:httpoison, "~> 1.4"},
       {:grpc, "~> 0.3.1"},
-      {:gun, "1.3.0"},
+      {:elixir_uuid, "~> 1.2"},
       {:jason, "~> 1.0", optional: true},
       {:protobuf, "~> 0.5"},
       {:earmark, "~> 1.0", only: :dev},

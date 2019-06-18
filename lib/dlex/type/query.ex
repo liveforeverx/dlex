@@ -3,12 +3,14 @@ defmodule Dlex.Type.Query do
 
   alias Dlex.Query
   alias Dlex.Api.{Request, Response, TxnContext}
-  alias Dlex.Api.Dgraph.Stub, as: ApiStub
 
   @behaviour Dlex.Type
 
   @impl true
-  def execute(channel, request, opts), do: ApiStub.query(channel, request, opts)
+  def execute(channel, request, opts) do
+    adapter = opts[:adapter]
+    apply(adapter, :query, [channel, request, Keyword.delete(opts, :adapter)])
+  end
 
   @impl true
   def describe(query, _opts), do: query

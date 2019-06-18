@@ -2,7 +2,9 @@ defmodule DlexTest do
   use ExUnit.Case
 
   setup_all do
-    {:ok, pid} = Dlex.start_link(pool_size: 2)
+    {:ok, pid} =
+      Dlex.start_link(pool_size: 2, port: 8080, adapter: Dlex.Adapters.HTTP, timeout: 120_000)
+
     Dlex.alter!(pid, %{drop_all: true})
     alter = "name: string @index(term) ."
     Dlex.alter!(pid, alter)
@@ -83,6 +85,10 @@ defmodule DlexTest do
     Dlex.alter!(pid, %{schema: surname_predicate})
     {:ok, %{"schema" => schema}} = Dlex.query_schema(pid)
     assert surname_predicate == Enum.find(schema, &(&1["predicate"] == "surname"))
+  end
+
+  test "malformed query", %{pid: pid} do
+    assert {:error, _} = Dlex.query(pid, "{ fail(func: eq(name, [])) { uid } } ")
   end
 
   def uid_get(conn, uid) do

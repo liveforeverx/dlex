@@ -3,12 +3,14 @@ defmodule Dlex.Type.Mutation do
 
   alias Dlex.{Query, Utils}
   alias Dlex.Api.{Assigned, Mutation}
-  alias Dlex.Api.Dgraph.Stub, as: ApiStub
 
   @behaviour Dlex.Type
 
   @impl true
-  def execute(channel, request, opts), do: ApiStub.mutate(channel, request, opts)
+  def execute(channel, request, opts) do
+    adapter = opts[:adapter]
+    apply(adapter, :mutate, [channel, request, Keyword.delete(opts, :adapter)])
+  end
 
   @impl true
   def describe(%Query{statement: statement} = query, opts) do

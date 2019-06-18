@@ -2,12 +2,14 @@ defmodule Dlex.Type.Operation do
   @moduledoc false
   alias Dlex.Query
   alias Dlex.Api.{Operation, Payload}
-  alias Dlex.Api.Dgraph.Stub, as: ApiStub
 
   @behaviour Dlex.Type
 
   @impl true
-  def execute(channel, request, opts), do: ApiStub.alter(channel, request, opts)
+  def execute(channel, request, opts) do
+    adapter = opts[:adapter]
+    apply(adapter, :alter, [channel, request, Keyword.delete(opts, :adapter)])
+  end
 
   @impl true
   def describe(%{statement: statement} = query, _opts) do
