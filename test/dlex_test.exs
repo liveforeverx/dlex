@@ -60,7 +60,7 @@ defmodule DlexTest do
     tasks = for i <- [1, 2], do: Task.async(fn -> move_balance(pid, i * 100) end)
     results = for task <- tasks, do: Task.await(task)
 
-    assert [{:ok, _}, {:error, _}] = results
+    assert [{:ok, _}, {:error, %Dlex.Error{reason: "Transaction has been aborted. Please retry."}}] = results
 
     %{"balance" => balance1} = get_by_name(pid, "client1")
     %{"balance" => balance2} = get_by_name(pid, "client2")
@@ -88,7 +88,8 @@ defmodule DlexTest do
   end
 
   test "malformed query", %{pid: pid} do
-    assert {:error, _} = Dlex.query(pid, "{ fail(func: eq(name, [])) { uid } } ")
+    assert {:error, error} = Dlex.query(pid, "{ fail(func: eq(name, [])) { uid } } ")
+    assert String.contains?(error.reason, "Expecting argument name")
   end
 
   def uid_get(conn, uid) do

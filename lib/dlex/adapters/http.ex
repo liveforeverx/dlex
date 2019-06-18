@@ -54,7 +54,12 @@ defmodule Dlex.Adapters.HTTP do
 
   # grab the first error message
   defp error_message_from_response(errs) do
-    error = Enum.find(errs, false, fn e -> String.contains?(e["code"], "InvalidRequest") end)
+    error =
+      Enum.find(errs, false, fn e ->
+        code = e["code"]
+        String.contains?(code, "InvalidRequest") || String.contains?(code, "Error")
+      end)
+
     if error, do: error["message"], else: errs
   end
 
