@@ -1,244 +1,265 @@
-defmodule Dlex.Adapters.HTTP do
-  use Dlex.Adapter
-  alias Dlex.Api.Payload
+if Code.ensure_loaded?(Mint) do
+  defmodule Dlex.Adapters.HTTP do
+    use Dlex.Adapter
 
-  require Logger
+    require Logger
 
-  # time a connection stays alive when idle
-  # number of connections to stay open per hackney pool (we use DBConnection to handle the pool)
-  # default request timeout for HTTPoison requests
-  @pool_timeout 60_000
-  @pool_size 1
-  @default_request_timeout 15_000
+    defmodule Request do
+      defstruct [:action, :start_ts, :json, :headers, :body]
+    end
 
-  # grab the JSON adapter to use
-  defp json_adapter(), do: Application.get_env(:dlex, :json_adapter, Jason)
+    defmodule Response do
+      defstruct [:ref, :done, :status, :headers, body: []]
+    end
 
-  # default request options
-  defp options_to_httpoison_options(opts) do
-    [recv_timeout: Keyword.get(opts, :timeout, @default_request_timeout)]
-  end
+    defmodule Error do
+      defexception [:message]
 
-  # grab default HTTPoison options
-  defp default_opts(%{pool: pool}, opts \\ []), do: [hackney: [pool: pool]] ++ opts
+      @impl true
+      def message(%{message: message}), do: message
+    end
 
-  # given any action and the response body, parse any response properly (checking for errors)
-  defp parse_response(action, raw_response_body) do
-    parsed_body = json_adapter().decode!(raw_response_body)
-    errors = parsed_body["errors"]
-
-    if errors && length(errors) > 0 do
-      parse_errors(errors)
-    else
-      data = parsed_body["data"]
-      uids = if data, do: data["uids"], else: nil
-      extensions = parsed_body["extensions"]
-      txn = if extensions, do: extensions["txn"], else: nil
-
-      case action do
-        :alter ->
-          {:ok, Dlex.Api.Payload.new(Data: data)}
-
-        :mutate ->
-          {:ok, Dlex.Api.Assigned.new(uids: uids, context: txn_from_json(txn))}
-
-        :query ->
-          data_as_json_str = json_adapter().encode!(parsed_body["data"])
-          {:ok, Dlex.Api.Response.new(txn: txn_from_json(txn), json: data_as_json_str)}
-
-        :commit ->
-          {:ok, txn_from_json(txn)}
+    @impl true
+    def connect(host, port, _opts \\ []) do
+      case Mint.HTTP.connect(:http, host, port, mode: :passive) do
+        {:ok, conn} -> {:ok, %{conn: conn, host: host, port: port}}
+        {:error, error} -> {:error, error}
       end
     end
-  end
 
-  # grab the first error message
-  defp error_message_from_response(errs) do
-    error =
-      Enum.find(errs, false, fn e ->
-        code = e["code"]
-        String.contains?(code, "InvalidRequest") || String.contains?(code, "Error")
-      end)
+    @impl true
+    def disconnect(%{conn: conn} = _channel) do
+      with {:ok, _} <- Mint.HTTP.close(conn), do: :ok
+    end
 
-    if error, do: error["message"], else: errs
-  end
+    @impl true
+    def ping(channel) do
+      with {:ok, _response, channel} <- get(channel, "/health", [], "", 5000), do: {:ok, channel}
+    end
 
-  # given the error array back from Dgraph, parse the first one and use it as the reason
-  defp parse_errors(errors) do
-    reason = error_message_from_response(errors)
-    if is_binary(reason), do: {:error, reason}, else: {:error, "Unknown error occured: #{inspect(errors)}"}
-  end
+    @impl true
+    def alter(channel, request, json_lib, opts) do
+      request = %Request{
+        action: :alter,
+        start_ts: 0,
+        json: json_lib,
+        headers: [],
+        body: request |> Map.from_struct() |> json_lib.encode!()
+      }
 
-  # given a json representation of a transaction, create the GRPC stub object
-  defp txn_from_json(json, aborted \\ false) do
-    if json do
-      start_ts = Map.get(json, "start_ts", 0)
-      commit_ts = Map.get(json, "commit_ts", 0)
-      local_aborted = Map.get(json, "aborted", false)
-      preds = Map.get(json, "preds", [])
-      keys = Map.get(json, "keys", [])
-      a = aborted || local_aborted
-      Dlex.Api.TxnContext.new(start_ts: start_ts, commit_ts: commit_ts, aborted: a, preds: preds, keys: keys)
-    else
+      handle_request(channel, request, opts)
+    end
+
+    @impl true
+    def mutate(channel, %{start_ts: start_ts} = request, json_lib, opts) do
+      {type, request_body} = find_mutation(request)
+
+      request = %Request{
+        action: :mutate,
+        start_ts: start_ts,
+        json: json_lib,
+        headers: commit_headers(request) ++ mutation_headers(type) ++ content_type(type),
+        body: request_body
+      }
+
+      handle_request(channel, request, opts)
+    end
+
+    defp find_mutation(%{set_json: json}) when json != "", do: {:json, ~s|{"set": #{json}}|}
+    defp find_mutation(%{delete_json: json}) when json != "", do: {:json, ~s|{"delete": #{json}}|}
+
+    defp find_mutation(%{set_nquads: nquads}) when nquads != "",
+      do: {:nquads, "{ set { #{nquads} } }"}
+
+    defp find_mutation(%{del_nquads: nquads}) when nquads != "",
+      do: {:nquads, "{ delete { #{nquads} } }"}
+
+    defp commit_headers(%{commit_now: true}), do: [{"X-Dgraph-CommitNow", "true"}]
+    defp commit_headers(_), do: []
+
+    defp mutation_headers(:json), do: [{"X-Dgraph-MutationType", "json"}]
+
+    defp mutation_headers(:nquads), do: []
+
+    @impl true
+    def query(channel, %{start_ts: start_ts, vars: vars, query: query}, json_lib, opts) do
+      request = %Request{
+        action: :query,
+        start_ts: start_ts,
+        json: json_lib,
+        headers: query_vars(vars, json_lib) ++ content_type(:json),
+        body: query
+      }
+
+      handle_request(channel, request, opts)
+    end
+
+    defp query_vars(nil, _json_lib), do: []
+    defp query_vars(vars, json_lib), do: [{"X-Dgraph-Vars", json_lib.encode!(vars)}]
+
+    @impl true
+    def commit_or_abort(channel, %{start_ts: start_ts, keys: keys}, json_lib, opts) do
+      request = %Request{
+        action: :commit,
+        start_ts: start_ts,
+        json: json_lib,
+        headers: content_type(:json),
+        body: json_lib.encode!(keys)
+      }
+
+      handle_request(channel, request, opts)
+    end
+
+    ## Generic request handling
+
+    defp content_type(:json), do: [{"Content-Type", "application/json"}]
+    defp content_type(:nquads), do: [{"Content-Type", "application/rdf"}]
+
+    defp handle_request(channel, %Request{action: action, start_ts: start_ts} = request, opts) do
+      %Request{json: json_lib, headers: headers, body: request_body} = request
+
+      path = build_path(action, start_ts)
+
+      case post(channel, path, headers, request_body, opts[:timeout]) do
+        {:ok, %{status: 200, body: response_body}, channel} ->
+          handle_response(channel, json_lib, action, response_body)
+
+        {:ok, response, channel} ->
+          {:error, response, channel}
+
+        {:error, reason, channel} ->
+          {:error, reason, channel}
+      end
+    end
+
+    defp build_path(action, start_ts) do
+      path = path(action)
+      if start_ts > 0, do: "#{path}/#{start_ts}", else: path
+    end
+
+    defp path(:alter), do: "/alter"
+    defp path(:mutate), do: "/mutate"
+    defp path(:query), do: "/query"
+    defp path(:commit), do: "/commit"
+
+    defp handle_response(channel, json_lib, action, body) do
+      response = json_lib.decode!(body)
+
+      case Map.get(response, "errors", []) do
+        [] ->
+          {:ok, parse_success(action, response), channel}
+
+        errors ->
+          {:error, %Error{message: parse_error(errors)}, channel}
+      end
+    end
+
+    defp parse_success(:alter, %{"data" => data}) do
+      Dlex.Api.Payload.new(Data: data)
+    end
+
+    defp parse_success(:mutate, %{"data" => %{"uids" => uids}} = response) do
+      Dlex.Api.Assigned.new(uids: uids, context: parse_txn(response))
+    end
+
+    defp parse_success(:query, %{"data" => data} = response) do
+      Dlex.Api.Response.new(txn: parse_txn(response), json: data)
+    end
+
+    defp parse_success(:commit, response) do
+      parse_txn(response)
+    end
+
+    defp parse_txn(json, aborted \\ false)
+
+    defp parse_txn(%{"extensions" => %{"txn" => txn}}, aborted) do
+      Dlex.Api.TxnContext.new(
+        start_ts: Map.get(txn, "start_ts", 0),
+        commit_ts: Map.get(txn, "commit_ts", 0),
+        aborted: aborted || Map.get(txn, "aborted", false),
+        preds: Map.get(txn, "preds", []),
+        keys: Map.get(txn, "keys", [])
+      )
+    end
+
+    defp parse_txn(_, aborted) do
       Dlex.Api.TxnContext.new(aborted: aborted)
     end
-  end
 
-  @impl true
-  @doc """
-  Connects to the Dgraph HTTP server via HTTPoison (using Hackney for internal pooling)
-  We generate a unique pool name so DBConnection can handle the pooling and the requests don't share the default
-  """
-  def connect(address, opts \\ []) do
-    pool_name = String.to_atom("dlex-#{UUID.uuid4()}")
+    defp parse_error([%{"message" => message} | _]), do: message
+    defp parse_error(errors), do: inspect(errors)
 
-    case :hackney_pool.start_pool(pool_name, timeout: @pool_timeout, max_connections: @pool_size) do
-      :ok ->
-        Logger.debug(fn -> "Dlex.Adapter.HTTP -> started hackney pool #{pool_name}" end)
-        {:ok, %{address: "http://#{address}", pool: pool_name}}
+    ## HTTP Client implementation
 
-      _ ->
-        {:error, "Failed to start the hackney pool for HTTP adapter"}
+    def post(channel, path, headers, body, timeout),
+      do: request(channel, "POST", path, headers, body, timeout)
+
+    def get(channel, path, headers, body, timeout),
+      do: request(channel, "GET", path, headers, body, timeout)
+
+    defp request(channel, method, path, headers, body, timeout) do
+      do_request(channel, method, path, headers, body, timeout, true)
     end
-  end
 
-  @impl true
-  @doc """
-  Disconnects the connections that are living in the hackney pool we generated
-  """
-  def disconnect(%{pool: pool}) do
-    case :hackney_pool.stop_pool(pool) do
-      :ok ->
-        Logger.debug(fn -> "Dlex.Adapter.HTTP -> stopped hackney pool #{pool}" end)
-        :ok
+    defp do_request(%{conn: conn} = channel, method, path, headers, body, timeout, may_connect) do
+      with {:ok, conn, ref} <- Mint.HTTP.request(conn, method, path, headers, body),
+           {:ok, response, conn} <- recv(conn, ref, timeout) do
+        {:ok, response, %{channel | conn: conn}}
+      else
+        {:error, conn, %{reason: :closed}, []} when may_connect ->
+          conn_request(%{channel | conn: conn}, method, path, headers, body, timeout)
 
-      val ->
-        val
+        {:error, conn, %{reason: :closed}} when may_connect ->
+          conn_request(%{channel | conn: conn}, method, path, headers, body, timeout)
+
+        {:error, conn, error} ->
+          {:error, error, %{channel | conn: conn}}
+
+        {:error, conn, error, _} ->
+          {:error, error, %{channel | conn: conn}}
+      end
     end
-  end
 
-  @impl true
-  @doc """
-  Pings the /health endpoint to make sure we have a connection (DBConnection will disconnect if this fails)
-  """
-  def ping(%{address: address, pool: pool} = conn) do
-    case HTTPoison.get("#{address}/health", [], default_opts(conn)) do
-      {:ok, _} ->
-        Logger.debug(fn -> "Dlex.Adapter.HTTP -> health check passed" end)
-        :ok
+    defp conn_request(%{host: host, port: port} = channel, method, path, headers, body, timeout) do
+      case Mint.HTTP.connect(:http, host, port, mode: :passive) do
+        {:ok, conn} ->
+          channel = %{channel | conn: conn, host: host, port: port}
+          do_request(channel, method, path, headers, body, timeout, false)
 
-      {:error, reason} ->
-        {:error, reason}
+        {:error, error} ->
+          {:error, error, channel}
+      end
     end
-  end
 
-  @impl true
-  def alter(%{address: address} = conn, request, request_options) do
-    request = json_adapter().encode!(Map.from_struct(request))
-    opts = options_to_httpoison_options(request_options)
-
-    case HTTPoison.post("#{address}/alter", request, [], default_opts(conn, opts)) do
-      {:ok, %HTTPoison.Response{status_code: 200, body: body}} -> parse_response(:alter, body)
-      {:ok, response} -> {:error, response}
-      {:error, reason} -> {:error, reason}
+    defp recv(conn, ref, timeout) do
+      start_time = :erlang.monotonic_time(:microsecond)
+      do_recv(conn, %Response{ref: ref}, start_time, timeout)
     end
-  end
 
-  @mutation_json_headers ["X-Dgraph-MutationType": "json", "Content-Type": "application/json"]
-  @mutation_rdf_headers ["Content-Type": "application/rdf"]
-  defp headers_from_mutation(mutation) do
-    h = if mutation.commit_now, do: ["X-Dgraph-CommitNow": "true"], else: []
-    h = if mutation.set_json != "" || mutation.delete_json != "", do: h ++ @mutation_json_headers, else: h
-    if mutation.set_nquads != "" || mutation.del_nquads != "", do: h ++ @mutation_rdf_headers, else: h
-  end
+    defp do_recv(conn, response, start_time, timeout) do
+      now_time = :erlang.monotonic_time(:microsecond)
+      recv_timeout = max(timeout - (now_time - start_time), 0)
 
-  defp url_from_mutation(mutation) do
-    if mutation.start_ts > 0, do: "mutate/#{mutation.start_ts}", else: "mutate"
-  end
-
-  defp request_from_mutation(mutation) do
-    cond do
-      mutation.set_json != "" -> json_adapter().encode!(%{set: json_adapter().decode!(mutation.set_json)})
-      mutation.delete_json != "" -> json_adapter().encode!(%{delete: json_adapter().decode!(mutation.delete_json)})
-      mutation.set_nquads != "" -> "{ set { #{mutation.set_nquads} } }"
-      mutation.del_nquads != "" -> "{ delete { #{mutation.del_nquads} } }"
+      with {:ok, conn, responses} <- Mint.HTTP.recv(conn, 0, recv_timeout) do
+        case Enum.reduce(responses, response, &parse_response/2) do
+          %{done: true} = response -> {:ok, response, conn}
+          response -> do_recv(conn, response, start_time, timeout)
+        end
+      end
     end
-  end
 
-  @impl true
-  def mutate(%{address: address} = conn, request, request_options) do
-    url = "#{address}/#{url_from_mutation(request)}"
-    start_ts = request.start_ts
-    headers = headers_from_mutation(request)
-    http_request = request_from_mutation(Map.from_struct(request))
-    opts = options_to_httpoison_options(request_options)
+    defp parse_response(message, %{ref: ref} = response) when ref != elem(message, 1),
+      do: response
 
-    case HTTPoison.post(url, http_request, headers, default_opts(conn, opts)) do
-      {:ok, %HTTPoison.Response{status_code: 200, body: body}} -> parse_response(:mutate, body)
-      {:ok, response} -> {:error, response}
-      {:error, reason} -> {:error, reason}
+    defp parse_response({:status, _, status}, response), do: %{response | status: status}
+    defp parse_response({:headers, _, headers}, response), do: %{response | headers: headers}
+
+    defp parse_response({:data, _, data}, %{body: body} = response),
+      do: %{response | body: [data | body]}
+
+    defp parse_response({:done, _}, %{body: body} = response) do
+      body = body |> Enum.reverse() |> Enum.join()
+      %{response | body: body, done: true}
     end
-  end
-
-  defp headers_from_query(query) do
-    headers = if query.vars, do: ["X-Dgraph-Vars": json_adapter().encode!(query.vars)], else: []
-    headers = headers ++ ["Content-Type": "application/json"]
-  end
-
-  defp url_from_query(query) do
-    if query.start_ts > 0, do: "query/#{query.start_ts}", else: "query"
-  end
-
-  defp request_from_query(query) do
-    cond do
-      query.query -> query.query
-      true -> query
-    end
-  end
-
-  @impl true
-  def query(%{address: address} = conn, request, request_options) do
-    url = "#{address}/#{url_from_query(request)}"
-    start_ts = request.start_ts
-    headers = headers_from_query(request)
-    http_request = request_from_query(Map.from_struct(request))
-    opts = options_to_httpoison_options(request_options)
-
-    case HTTPoison.post(url, http_request, headers, default_opts(conn, opts)) do
-      {:ok, %HTTPoison.Response{status_code: 200, body: body}} -> parse_response(:query, body)
-      {:ok, response} -> {:error, response}
-      {:error, reason} -> {:error, reason}
-    end
-  end
-
-  defp url_from_commit(request) do
-    "commit/#{request.start_ts}"
-  end
-
-  defp headers_from_commit(_request) do
-    ["Content-Type": "application/json"]
-  end
-
-  defp request_from_commit(request) do
-    if length(request.keys) > 0, do: json_adapter().encode!(request.keys), else: "[]"
-  end
-
-  @impl true
-  def commit_or_abort(%{address: address} = conn, request, request_options) do
-    url = "#{address}/#{url_from_commit(request)}"
-    start_ts = request.start_ts
-    headers = headers_from_commit(request)
-    http_request = request_from_commit(Map.from_struct(request))
-    opts = options_to_httpoison_options(request_options)
-
-    case HTTPoison.post(url, http_request, headers, default_opts(conn, opts)) do
-      {:ok, %HTTPoison.Response{status_code: 200, body: body}} -> parse_response(:commit, body)
-      {:ok, response} -> {:error, response}
-      {:error, reason} -> {:error, reason}
-    end
-  end
-
-  defp abort(%{address: address} = conn, request, request_options) do
-    {:error, "Transaction has been aborted. Please retry."}
   end
 end

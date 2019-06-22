@@ -1,7 +1,7 @@
 defmodule Dlex.Protocol do
   @moduledoc false
 
-  alias Dlex.{Error, Type, Query}
+  alias Dlex.{Adapter, Error, Type, Query}
   alias Dlex.Api.TxnContext
 
   use DBConnection
@@ -10,14 +10,16 @@ defmodule Dlex.Protocol do
 
   defstruct [:adapter, :channel, :connected, :json, :opts, :txn_context, txn_aborted?: false]
 
+  @timeout 15_000
+
   @impl true
   def connect(opts) do
     host = Keyword.fetch!(opts, :hostname)
     port = Keyword.fetch!(opts, :port)
-    adapter = Keyword.fetch!(opts, :adapter)
+    adapter = opts |> Keyword.fetch!(:transport) |> get_adapter()
     json_lib = Keyword.fetch!(opts, :json_library)
 
-    case adapter.connect("#{host}:#{port}", opts) do
+    case Adapter.connect(adapter, host, port, opts) do
       {:ok, channel} ->
         state = %__MODULE__{adapter: adapter, json: json_lib, channel: channel, opts: opts}
         {:ok, state}
@@ -27,13 +29,16 @@ defmodule Dlex.Protocol do
     end
   end
 
+  defp get_adapter(:grpc), do: Dlex.Adapters.GRPC
+  defp get_adapter(:http), do: Dlex.Adapters.HTTP
+
   # Implement calls for DBConnection Protocol
 
   @impl true
   def ping(%{adapter: adapter, channel: channel} = state) do
-    case adapter.ping(channel) do
-      :ok -> {:ok, state}
-      {:disconnect, reason} -> {:disconnect, reason, state}
+    case Adapter.ping(adapter, channel) do
+      {:ok, channel} -> {:ok, %{state | channel: channel}}
+      {:error, reason, channel} -> {:disconnect, reason, %{state | channel: channel}}
     end
   end
 
@@ -48,8 +53,8 @@ defmodule Dlex.Protocol do
   end
 
   @impl true
-  def disconnect(error, %{adapter: adapter, channel: channel} = state) do
-    adapter.disconnect(channel)
+  def disconnect(_error, %{adapter: adapter, channel: channel} = _state) do
+    Adapter.disconnect(adapter, channel)
   end
 
   ## Transaction API
@@ -60,25 +65,35 @@ defmodule Dlex.Protocol do
   end
 
   @impl true
-  def handle_rollback(_opts, state), do: finish_txn(state, :rollback)
+  def handle_rollback(opts, state), do: finish_txn(state, :rollback, opts)
 
   @impl true
-  def handle_commit(_opts, state), do: finish_txn(state, :commit)
+  def handle_commit(opts, state), do: finish_txn(state, :commit, opts)
 
-  defp finish_txn(%{txn_aborted?: true} = state, txn_result) do
+  defp finish_txn(%{txn_aborted?: true} = state, txn_result, _opts) do
     {:error, %Error{action: txn_result, reason: :aborted}, state}
   end
 
-  defp finish_txn(state, txn_result) do
-    %{adapter: adapter, channel: channel, txn_context: txn_context, opts: opts} = state
+  defp finish_txn(state, txn_result, opts) do
+    %{adapter: adapter, channel: channel, json: json_lib, txn_context: txn_context} = state
     state = %{state | txn_context: nil}
+    timeout = Keyword.get(opts, :timeout, @timeout)
+    txn_context = %{txn_context | aborted: txn_result != :commit}
 
-    case adapter.commit_or_abort(channel, %{txn_context | aborted: txn_result != :commit}, opts) do
+    case Adapter.commit_or_abort(adapter, channel, txn_context, json_lib, timeout: timeout) do
       {:ok, txn} ->
         {:ok, txn, state}
 
+      {:ok, txn, channel} ->
+        {:ok, txn, %{state | channel: channel}}
+
       {:error, reason} ->
-        {state_on_error(reason), %Error{action: txn_result, reason: reason}, state}
+        error = %Error{action: txn_result, reason: reason}
+        {state_on_error(reason), error, state}
+
+      {:error, reason, channel} ->
+        error = %Error{action: txn_result, reason: reason}
+        {state_on_error(reason), error, %{state | channel: channel}}
     end
   end
 
@@ -90,17 +105,24 @@ defmodule Dlex.Protocol do
   end
 
   @impl true
-  def handle_execute(%Query{} = query, request, _opts, state) do
-    %{adapter: adapter, channel: channel, opts: opts} = state
-    timeout = Keyword.fetch!(opts, :timeout)
+  def handle_execute(%Query{} = query, request, opts, state) do
+    %{adapter: adapter, channel: channel} = state
+    timeout = Keyword.get(opts, :timeout, @timeout)
 
-    case Type.execute(channel, query, request, timeout: timeout, adapter: adapter) do
+    case Type.execute(adapter, channel, query, request, timeout: timeout) do
       {:ok, result} ->
         {:ok, query, result, check_txn(state, result)}
+
+      {:ok, result, channel} ->
+        {:ok, query, result, check_txn(%{state | channel: channel}, result)}
 
       {:error, reason} ->
         error = %Error{action: :execute, reason: reason}
         {state_on_error(reason), error, check_abort(state, reason)}
+
+      {:error, reason, channel} ->
+        error = %Error{action: :execute, reason: reason}
+        {state_on_error(reason), error, check_abort(%{state | channel: channel}, reason)}
     end
   end
 
@@ -127,7 +149,7 @@ defmodule Dlex.Protocol do
   end
 
   @impl true
-  def handle_close(query, _opts, state) do
+  def handle_close(_query, _opts, state) do
     {:ok, nil, state}
   end
 
@@ -144,7 +166,7 @@ defmodule Dlex.Protocol do
   end
 
   @impl true
-  def handle_fetch(query, _cursor, _opts, state) do
+  def handle_fetch(_query, _cursor, _opts, state) do
     {:halt, nil, state}
   end
 

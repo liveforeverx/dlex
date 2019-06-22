@@ -1,15 +1,14 @@
 defmodule Dlex.Type.Query do
   @moduledoc false
 
-  alias Dlex.Query
+  alias Dlex.{Adapter, Query}
   alias Dlex.Api.{Request, Response, TxnContext}
 
   @behaviour Dlex.Type
 
   @impl true
-  def execute(channel, request, opts) do
-    adapter = opts[:adapter]
-    apply(adapter, :query, [channel, request, Keyword.delete(opts, :adapter)])
+  def execute(adapter, channel, request, json_lib, opts) do
+    Adapter.query(adapter, channel, request, json_lib, opts)
   end
 
   @impl true
@@ -26,6 +25,6 @@ defmodule Dlex.Type.Query do
   end
 
   def decode(%{json: json_lib}, %Response{json: json, txn: %TxnContext{aborted: false} = _txn}, _) do
-    json_lib.decode!(json)
+    with json when is_binary(json) <- json, do: json_lib.decode!(json)
   end
 end
