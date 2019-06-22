@@ -1,14 +1,13 @@
 defmodule Dlex.Type.Operation do
   @moduledoc false
-  alias Dlex.Query
+  alias Dlex.{Adapter, Query}
   alias Dlex.Api.{Operation, Payload}
 
   @behaviour Dlex.Type
 
   @impl true
-  def execute(channel, request, opts) do
-    adapter = opts[:adapter]
-    apply(adapter, :alter, [channel, request, Keyword.delete(opts, :adapter)])
+  def execute(adapter, channel, request, json_lib, opts) do
+    Adapter.alter(adapter, channel, request, json_lib, opts)
   end
 
   @impl true

@@ -1,3 +1,4 @@
+{:ok, _} = Application.ensure_all_started(:grpc)
 ExUnit.start()
 
 defmodule Dlex.User do

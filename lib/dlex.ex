@@ -24,7 +24,8 @@ defmodule Dlex do
     * `:port` - Server port (default: DGRAPH_PORT env var, then 9080)
     * `:keepalive` - Keepalive option for http client (default: `:infinity`)
     * `:json_library` - Specifies json library to use (default: `Jason`)
-    * `:timeout` - Request timeout in milliseconds (default: `#{@timeout}`);
+    * `:transport` - Specify if grpc or http should be used (default: `grpc`)
+    * `:timeout` - Connection timeout in milliseconds (default: `#{@timeout}`);
 
   ### SSL/TLS configuration (automaticly enabled, if required files provided)
 
@@ -62,7 +63,7 @@ defmodule Dlex do
     opts
     |> Keyword.put_new(:hostname, System.get_env("DGRAPH_HOST") || "localhost")
     |> Keyword.put_new(:port, System.get_env("DGRAPH_PORT") || 9080)
-    |> Keyword.put_new(:adapter, Dlex.Adapters.GRPC)
+    |> Keyword.put_new(:transport, :grpc)
     |> Keyword.put_new(:timeout, @timeout)
     |> Keyword.put_new(:keepalive, @default_keepalive)
     |> Keyword.put_new(:idle_interval, @idle_interval)
@@ -86,11 +87,6 @@ defmodule Dlex do
     DBConnection.child_spec(Dlex.Protocol, opts)
   end
 
-  defp request_options(opts) do
-    timeout = Application.get_env(:dlex, :timeout, @timeout)
-    Keyword.put_new(opts, :timeout, timeout)
-  end
-
   @doc """
   Alter dgraph schema
 
@@ -98,10 +94,13 @@ defmodule Dlex do
 
       iex> Dlex.alter(conn, "name: string @index(term) .")
       {:ok, ""}
+
+  ## Options
+
+    * `:timeout` - Call timeout (default: `#{@timeout}`)
   """
   @spec alter(conn, iodata | map, Keyword.t()) :: {:ok, map} | {:error, Dlex.Error.t() | term}
   def alter(conn, statement, opts \\ []) do
-    opts = request_options(opts)
     query = %Query{type: Type.Operation, statement: statement}
 
     with {:ok, _, result} <- DBConnection.prepare_execute(conn, query, %{}, opts),
@@ -162,11 +161,13 @@ defmodule Dlex do
          "uid" => "0xfe04f"
        }}
 
+  ## Options
+
+    * `:timeout` - Call timeout (default: `#{@timeout}`)
   """
   @spec mutate(conn, iodata | map, Keyword.t()) :: {:ok, map} | {:error, Dlex.Error.t() | term}
   def mutate(conn, statement, opts \\ []) do
     query = %Query{type: Type.Mutation, statement: statement}
-    opts = request_options(opts)
 
     with {:ok, _, result} <- DBConnection.prepare_execute(conn, query, %{}, opts),
          do: {:ok, result}
@@ -216,11 +217,14 @@ defmodule Dlex do
          "uid" => "0xfe04f"
        }}
 
+  ## Options
+
+    * `:timeout` - Call timeout (default: `#{@timeout}`)
+
   """
   @spec delete(conn, iodata | map, Keyword.t()) :: {:ok, map} | {:error, Dlex.Error.t() | term}
   def delete(conn, statement, opts \\ []) do
     query = %Query{type: Type.Mutation, sub_type: :deletion, statement: statement}
-    opts = request_options(opts)
 
     with {:ok, _, result} <- DBConnection.prepare_execute(conn, query, %{}, opts),
          do: {:ok, result}
@@ -257,7 +261,6 @@ defmodule Dlex do
   @spec query(conn, iodata, map, Keyword.t()) :: {:ok, map} | {:error, Dlex.Error.t() | term}
   def query(conn, statement, parameters \\ %{}, opts \\ []) do
     query = %Query{type: Type.Query, statement: statement}
-    opts = request_options(opts)
 
     with {:ok, _, result} <- DBConnection.prepare_execute(conn, query, parameters, opts),
          do: {:ok, result}
@@ -293,8 +296,6 @@ defmodule Dlex do
   @spec transaction(conn, (DBConnection.t() -> result :: any), Keyword.t()) ::
           {:ok, result :: any} | {:error, any}
   def transaction(conn, fun, opts \\ []) do
-    opts = request_options(opts)
-
     try do
       DBConnection.transaction(conn, fun, opts)
     catch

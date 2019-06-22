@@ -43,14 +43,16 @@ defmodule Dlex.Repo do
         Dlex.Repo.Sup.start_link(start_opts)
       end
 
-      def set(node), do: Dlex.Repo.set(@name, node)
-      def set!(node), do: Dlex.Repo.set!(@name, node)
+      def set(node, opts \\ []), do: Dlex.Repo.set(@name, node, opts)
+      def set!(node, opts \\ []), do: Dlex.Repo.set!(@name, node, opts)
 
-      def mutate(node), do: Dlex.Repo.mutate(@name, node)
-      def mutate!(node), do: Dlex.Repo.mutate!(@name, node)
+      def mutate(node, opts \\ []), do: Dlex.Repo.mutate(@name, node, opts)
+      def mutate!(node, opts \\ []), do: Dlex.Repo.mutate!(@name, node, opts)
 
       def get(uid), do: Dlex.Repo.get(@name, meta(), uid)
       def get!(uid), do: Dlex.Repo.get!(@name, meta(), uid)
+
+      def all(query), do: Dlex.Repo.all(@name, query)
 
       def meta(), do: Dlex.Repo.Meta.get(@meta_name)
       def register(modules), do: Dlex.Repo.Meta.register(@meta_name, modules)
@@ -61,6 +63,7 @@ defmodule Dlex.Repo do
     end
   end
 
+  @doc false
   def child_spec(%{module: module, otp_app: otp_app, name: name, opts: opts}) do
     opts = Keyword.merge(opts, Application.get_env(otp_app, module, []))
     Dlex.child_spec([{:name, name} | opts])
@@ -80,20 +83,27 @@ defmodule Dlex.Repo do
   end
 
   @doc """
+  Query all
+  """
+  def all(conn, query) do
+    Dlex.query(conn, query)
+  end
+
+  @doc """
   The same as `mutate!`.
   """
-  def set!(conn, data), do: mutate!(conn, data)
+  def set!(conn, data, opts), do: mutate!(conn, data, opts)
 
   @doc """
   The same as `mutate`.
   """
-  def set(conn, data), do: mutate(conn, data)
+  def set(conn, data, opts), do: mutate(conn, data, opts)
 
   @doc """
   The same as `mutate/2`, but return result of sucessful operation or raises.
   """
-  def mutate!(conn, data) do
-    case mutate(conn, data) do
+  def mutate!(conn, data, opts) do
+    case mutate(conn, data, opts) do
       {:ok, result} -> result
       {:error, error} -> raise error
     end
@@ -102,15 +112,15 @@ defmodule Dlex.Repo do
   @doc """
   Mutate data
   """
-  def mutate(conn, %{__struct__: Ecto.Changeset, changes: changes, data: %type{uid: uid}}) do
+  def mutate(conn, %{__struct__: Ecto.Changeset, changes: changes, data: %type{uid: uid}}, opts) do
     data = struct(type, Map.put(changes, :uid, uid))
-    set(conn, data)
+    mutate(conn, data, opts)
   end
 
-  def mutate(conn, data) do
+  def mutate(conn, data, opts) do
     data_with_ids = Utils.add_blank_ids(data, :uid)
 
-    with {:ok, ids_map} <- Dlex.set(conn, encode(data_with_ids)) do
+    with {:ok, ids_map} <- Dlex.mutate(conn, encode(data_with_ids), opts) do
       {:ok, Utils.replace_ids(data_with_ids, ids_map, :uid)}
     end
   end

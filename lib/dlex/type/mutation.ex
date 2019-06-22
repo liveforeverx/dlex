@@ -1,15 +1,14 @@
 defmodule Dlex.Type.Mutation do
   @moduledoc false
 
-  alias Dlex.{Query, Utils}
+  alias Dlex.{Adapter, Query, Utils}
   alias Dlex.Api.{Assigned, Mutation}
 
   @behaviour Dlex.Type
 
   @impl true
-  def execute(channel, request, opts) do
-    adapter = opts[:adapter]
-    apply(adapter, :mutate, [channel, request, Keyword.delete(opts, :adapter)])
+  def execute(adapter, channel, request, json_lib, opts) do
+    Adapter.mutate(adapter, channel, request, json_lib, opts)
   end
 
   @impl true

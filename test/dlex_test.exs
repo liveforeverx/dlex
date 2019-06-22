@@ -2,8 +2,8 @@ defmodule DlexTest do
   use ExUnit.Case
 
   setup_all do
-    {:ok, pid} =
-      Dlex.start_link(pool_size: 2, port: 8080, adapter: Dlex.Adapters.HTTP, timeout: 120_000)
+    # {:ok, pid} = Dlex.start_link(pool_size: 2, port: 8080, transport: :http)
+    {:ok, pid} = Dlex.start_link(pool_size: 2)
 
     Dlex.alter!(pid, %{drop_all: true})
     alter = "name: string @index(term) ."
@@ -60,7 +60,11 @@ defmodule DlexTest do
     tasks = for i <- [1, 2], do: Task.async(fn -> move_balance(pid, i * 100) end)
     results = for task <- tasks, do: Task.await(task)
 
-    assert [{:ok, _}, {:error, %Dlex.Error{reason: "Transaction has been aborted. Please retry."}}] = results
+    assert [
+             {:ok, _},
+             {:error,
+              %Dlex.Error{reason: %{message: "Transaction has been aborted. Please retry."}}}
+           ] = results
 
     %{"balance" => balance1} = get_by_name(pid, "client1")
     %{"balance" => balance2} = get_by_name(pid, "client2")
@@ -89,7 +93,7 @@ defmodule DlexTest do
 
   test "malformed query", %{pid: pid} do
     assert {:error, error} = Dlex.query(pid, "{ fail(func: eq(name, [])) { uid } } ")
-    assert String.contains?(error.reason, "Expecting argument name")
+    assert String.contains?(error.reason.message, "Expecting argument name")
   end
 
   def uid_get(conn, uid) do

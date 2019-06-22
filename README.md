@@ -12,10 +12,26 @@ delete mutations and low-level parameterized queries. DSL is planned.
 If [available in Hex](https://hex.pm/docs/publish), the package can be installed
 by adding `dlex` to your list of dependencies in `mix.exs`:
 
+Preffered and more performant option is to use `grpc`:
+
 ```elixir
 def deps do
   [
     {:jason, "~> 1.0"},
+    {:grpc, "~> 0.3.1"},
+    {:dlex, "~> 0.1.0"}
+  ]
+end
+```
+
+`http` transport:
+
+```elixir
+def deps do
+  [
+    {:jason, "~> 1.0"},
+    {:castore, "~> 0.1.0", optional: true},
+    {:mint, github: "liveforeverx/mint", branch: "double_wrapping"},
     {:dlex, "~> 0.1.0"}
   ]
 end
@@ -78,7 +94,7 @@ protoc --elixir_out=plugins=grpc:. lib/api.proto
 
 4. Files `lib/api.pb.ex` will be generated
 
-5. Rename `lib/api.pb.ex` to `lib/dix/api.ex` and add `alias Dlex.Api` to be complient with Elixir naming
+5. Rename `lib/api.pb.ex` to `lib/dlex/api.ex` and add `alias Dlex.Api` to be complient with Elixir naming
 
 ## Credits
 

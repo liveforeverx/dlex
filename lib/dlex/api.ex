@@ -8,16 +8,18 @@ defmodule Api.Request do
           query: String.t(),
           vars: %{String.t() => String.t()},
           start_ts: non_neg_integer,
-          lin_read: Api.LinRead.t(),
-          read_only: boolean
+          lin_read: Api.LinRead.t() | nil,
+          read_only: boolean,
+          best_effort: boolean
         }
-  defstruct [:query, :vars, :start_ts, :lin_read, :read_only]
+  defstruct [:query, :vars, :start_ts, :lin_read, :read_only, :best_effort]
 
-  field(:query, 1, type: :string)
-  field(:vars, 2, repeated: true, type: Api.Request.VarsEntry, map: true)
-  field(:start_ts, 13, type: :uint64)
-  field(:lin_read, 14, type: Api.LinRead)
-  field(:read_only, 15, type: :bool)
+  field :query, 1, type: :string
+  field :vars, 2, repeated: true, type: Api.Request.VarsEntry, map: true
+  field :start_ts, 13, type: :uint64
+  field :lin_read, 14, type: Api.LinRead
+  field :read_only, 15, type: :bool
+  field :best_effort, 16, type: :bool
 end
 
 defmodule Api.Request.VarsEntry do
@@ -30,8 +32,8 @@ defmodule Api.Request.VarsEntry do
         }
   defstruct [:key, :value]
 
-  field(:key, 1, type: :string)
-  field(:value, 2, type: :string)
+  field :key, 1, type: :string
+  field :value, 2, type: :string
 end
 
 defmodule Api.Response do
@@ -39,17 +41,17 @@ defmodule Api.Response do
   use Protobuf, syntax: :proto3
 
   @type t :: %__MODULE__{
-          json: String.t(),
+          json: binary,
           schema: [Api.SchemaNode.t()],
-          txn: Api.TxnContext.t(),
-          latency: Api.Latency.t()
+          txn: Api.TxnContext.t() | nil,
+          latency: Api.Latency.t() | nil
         }
   defstruct [:json, :schema, :txn, :latency]
 
-  field(:json, 1, type: :bytes)
-  field(:schema, 2, repeated: true, type: Api.SchemaNode)
-  field(:txn, 3, type: Api.TxnContext)
-  field(:latency, 12, type: Api.Latency)
+  field :json, 1, type: :bytes
+  field :schema, 2, repeated: true, type: Api.SchemaNode, deprecated: true
+  field :txn, 3, type: Api.TxnContext
+  field :latency, 12, type: Api.Latency
 end
 
 defmodule Api.Assigned do
@@ -58,14 +60,14 @@ defmodule Api.Assigned do
 
   @type t :: %__MODULE__{
           uids: %{String.t() => String.t()},
-          context: Api.TxnContext.t(),
-          latency: Api.Latency.t()
+          context: Api.TxnContext.t() | nil,
+          latency: Api.Latency.t() | nil
         }
   defstruct [:uids, :context, :latency]
 
-  field(:uids, 1, repeated: true, type: Api.Assigned.UidsEntry, map: true)
-  field(:context, 2, type: Api.TxnContext)
-  field(:latency, 12, type: Api.Latency)
+  field :uids, 1, repeated: true, type: Api.Assigned.UidsEntry, map: true
+  field :context, 2, type: Api.TxnContext
+  field :latency, 12, type: Api.Latency
 end
 
 defmodule Api.Assigned.UidsEntry do
@@ -78,8 +80,8 @@ defmodule Api.Assigned.UidsEntry do
         }
   defstruct [:key, :value]
 
-  field(:key, 1, type: :string)
-  field(:value, 2, type: :string)
+  field :key, 1, type: :string
+  field :value, 2, type: :string
 end
 
 defmodule Api.Mutation do
@@ -87,10 +89,11 @@ defmodule Api.Mutation do
   use Protobuf, syntax: :proto3
 
   @type t :: %__MODULE__{
-          set_json: String.t(),
-          delete_json: String.t(),
-          set_nquads: String.t(),
-          del_nquads: String.t(),
+          set_json: binary,
+          delete_json: binary,
+          set_nquads: binary,
+          del_nquads: binary,
+          query: String.t(),
           set: [Api.NQuad.t()],
           del: [Api.NQuad.t()],
           start_ts: non_neg_integer,
@@ -102,6 +105,7 @@ defmodule Api.Mutation do
     :delete_json,
     :set_nquads,
     :del_nquads,
+    :query,
     :set,
     :del,
     :start_ts,
@@ -109,15 +113,16 @@ defmodule Api.Mutation do
     :ignore_index_conflict
   ]
 
-  field(:set_json, 1, type: :bytes)
-  field(:delete_json, 2, type: :bytes)
-  field(:set_nquads, 3, type: :bytes)
-  field(:del_nquads, 4, type: :bytes)
-  field(:set, 10, repeated: true, type: Api.NQuad)
-  field(:del, 11, repeated: true, type: Api.NQuad)
-  field(:start_ts, 13, type: :uint64)
-  field(:commit_now, 14, type: :bool)
-  field(:ignore_index_conflict, 15, type: :bool)
+  field :set_json, 1, type: :bytes
+  field :delete_json, 2, type: :bytes
+  field :set_nquads, 3, type: :bytes
+  field :del_nquads, 4, type: :bytes
+  field :query, 5, type: :string
+  field :set, 10, repeated: true, type: Api.NQuad
+  field :del, 11, repeated: true, type: Api.NQuad
+  field :start_ts, 13, type: :uint64
+  field :commit_now, 14, type: :bool
+  field :ignore_index_conflict, 15, type: :bool
 end
 
 defmodule Api.Operation do
@@ -127,13 +132,28 @@ defmodule Api.Operation do
   @type t :: %__MODULE__{
           schema: String.t(),
           drop_attr: String.t(),
-          drop_all: boolean
+          drop_all: boolean,
+          drop_op: atom | integer,
+          drop_value: String.t()
         }
-  defstruct [:schema, :drop_attr, :drop_all]
+  defstruct [:schema, :drop_attr, :drop_all, :drop_op, :drop_value]
 
-  field(:schema, 1, type: :string)
-  field(:drop_attr, 2, type: :string)
-  field(:drop_all, 3, type: :bool)
+  field :schema, 1, type: :string
+  field :drop_attr, 2, type: :string
+  field :drop_all, 3, type: :bool
+  field :drop_op, 4, type: Api.Operation.DropOp, enum: true
+  field :drop_value, 5, type: :string
+end
+
+defmodule Api.Operation.DropOp do
+  @moduledoc false
+  use Protobuf, enum: true, syntax: :proto3
+
+  field :NONE, 0
+  field :ALL, 1
+  field :DATA, 2
+  field :ATTR, 3
+  field :TYPE, 4
 end
 
 defmodule Api.Payload do
@@ -141,11 +161,11 @@ defmodule Api.Payload do
   use Protobuf, syntax: :proto3
 
   @type t :: %__MODULE__{
-          Data: String.t()
+          Data: binary
         }
   defstruct [:Data]
 
-  field(:Data, 1, type: :bytes)
+  field :Data, 1, type: :bytes
 end
 
 defmodule Api.TxnContext do
@@ -158,22 +178,23 @@ defmodule Api.TxnContext do
           aborted: boolean,
           keys: [String.t()],
           preds: [String.t()],
-          lin_read: Api.LinRead.t()
+          lin_read: Api.LinRead.t() | nil
         }
   defstruct [:start_ts, :commit_ts, :aborted, :keys, :preds, :lin_read]
 
-  field(:start_ts, 1, type: :uint64)
-  field(:commit_ts, 2, type: :uint64)
-  field(:aborted, 3, type: :bool)
-  field(:keys, 4, repeated: true, type: :string)
-  field(:preds, 5, repeated: true, type: :string)
-  field(:lin_read, 13, type: Api.LinRead)
+  field :start_ts, 1, type: :uint64
+  field :commit_ts, 2, type: :uint64
+  field :aborted, 3, type: :bool
+  field :keys, 4, repeated: true, type: :string
+  field :preds, 5, repeated: true, type: :string
+  field :lin_read, 13, type: Api.LinRead
 end
 
 defmodule Api.Check do
   @moduledoc false
   use Protobuf, syntax: :proto3
 
+  @type t :: %__MODULE__{}
   defstruct []
 end
 
@@ -186,7 +207,7 @@ defmodule Api.Version do
         }
   defstruct [:tag]
 
-  field(:tag, 1, type: :string)
+  field :tag, 1, type: :string
 end
 
 defmodule Api.LinRead do
@@ -195,12 +216,12 @@ defmodule Api.LinRead do
 
   @type t :: %__MODULE__{
           ids: %{non_neg_integer => non_neg_integer},
-          sequencing: integer
+          sequencing: atom | integer
         }
   defstruct [:ids, :sequencing]
 
-  field(:ids, 1, repeated: true, type: Api.LinRead.IdsEntry, map: true)
-  field(:sequencing, 2, type: Api.LinRead.Sequencing, enum: true)
+  field :ids, 1, repeated: true, type: Api.LinRead.IdsEntry, map: true
+  field :sequencing, 2, type: Api.LinRead.Sequencing, enum: true
 end
 
 defmodule Api.LinRead.IdsEntry do
@@ -213,16 +234,16 @@ defmodule Api.LinRead.IdsEntry do
         }
   defstruct [:key, :value]
 
-  field(:key, 1, type: :uint32)
-  field(:value, 2, type: :uint64)
+  field :key, 1, type: :uint32
+  field :value, 2, type: :uint64
 end
 
 defmodule Api.LinRead.Sequencing do
   @moduledoc false
   use Protobuf, enum: true, syntax: :proto3
 
-  field(:CLIENT_SIDE, 0)
-  field(:SERVER_SIDE, 1)
+  field :CLIENT_SIDE, 0
+  field :SERVER_SIDE, 1
 end
 
 defmodule Api.Latency do
@@ -236,9 +257,9 @@ defmodule Api.Latency do
         }
   defstruct [:parsing_ns, :processing_ns, :encoding_ns]
 
-  field(:parsing_ns, 1, type: :uint64)
-  field(:processing_ns, 2, type: :uint64)
-  field(:encoding_ns, 3, type: :uint64)
+  field :parsing_ns, 1, type: :uint64
+  field :processing_ns, 2, type: :uint64
+  field :encoding_ns, 3, type: :uint64
 end
 
 defmodule Api.NQuad do
@@ -249,20 +270,20 @@ defmodule Api.NQuad do
           subject: String.t(),
           predicate: String.t(),
           object_id: String.t(),
-          object_value: Api.Value.t(),
+          object_value: Api.Value.t() | nil,
           label: String.t(),
           lang: String.t(),
           facets: [Api.Facet.t()]
         }
   defstruct [:subject, :predicate, :object_id, :object_value, :label, :lang, :facets]
 
-  field(:subject, 1, type: :string)
-  field(:predicate, 2, type: :string)
-  field(:object_id, 3, type: :string)
-  field(:object_value, 4, type: Api.Value)
-  field(:label, 5, type: :string)
-  field(:lang, 6, type: :string)
-  field(:facets, 7, repeated: true, type: Api.Facet)
+  field :subject, 1, type: :string
+  field :predicate, 2, type: :string
+  field :object_id, 3, type: :string
+  field :object_value, 4, type: Api.Value
+  field :label, 5, type: :string
+  field :lang, 6, type: :string
+  field :facets, 7, repeated: true, type: Api.Facet
 end
 
 defmodule Api.Value do
@@ -275,17 +296,17 @@ defmodule Api.Value do
   defstruct [:val]
 
   oneof(:val, 0)
-  field(:default_val, 1, type: :string, oneof: 0)
-  field(:bytes_val, 2, type: :bytes, oneof: 0)
-  field(:int_val, 3, type: :int64, oneof: 0)
-  field(:bool_val, 4, type: :bool, oneof: 0)
-  field(:str_val, 5, type: :string, oneof: 0)
-  field(:double_val, 6, type: :double, oneof: 0)
-  field(:geo_val, 7, type: :bytes, oneof: 0)
-  field(:date_val, 8, type: :bytes, oneof: 0)
-  field(:datetime_val, 9, type: :bytes, oneof: 0)
-  field(:password_val, 10, type: :string, oneof: 0)
-  field(:uid_val, 11, type: :uint64, oneof: 0)
+  field :default_val, 1, type: :string, oneof: 0
+  field :bytes_val, 2, type: :bytes, oneof: 0
+  field :int_val, 3, type: :int64, oneof: 0
+  field :bool_val, 4, type: :bool, oneof: 0
+  field :str_val, 5, type: :string, oneof: 0
+  field :double_val, 6, type: :double, oneof: 0
+  field :geo_val, 7, type: :bytes, oneof: 0
+  field :date_val, 8, type: :bytes, oneof: 0
+  field :datetime_val, 9, type: :bytes, oneof: 0
+  field :password_val, 10, type: :string, oneof: 0
+  field :uid_val, 11, type: :uint64, oneof: 0
 end
 
 defmodule Api.Facet do
@@ -294,29 +315,29 @@ defmodule Api.Facet do
 
   @type t :: %__MODULE__{
           key: String.t(),
-          value: String.t(),
-          val_type: integer,
+          value: binary,
+          val_type: atom | integer,
           tokens: [String.t()],
           alias: String.t()
         }
   defstruct [:key, :value, :val_type, :tokens, :alias]
 
-  field(:key, 1, type: :string)
-  field(:value, 2, type: :bytes)
-  field(:val_type, 3, type: Api.Facet.ValType, enum: true)
-  field(:tokens, 4, repeated: true, type: :string)
-  field(:alias, 5, type: :string)
+  field :key, 1, type: :string
+  field :value, 2, type: :bytes
+  field :val_type, 3, type: Api.Facet.ValType, enum: true
+  field :tokens, 4, repeated: true, type: :string
+  field :alias, 5, type: :string
 end
 
 defmodule Api.Facet.ValType do
   @moduledoc false
   use Protobuf, enum: true, syntax: :proto3
 
-  field(:STRING, 0)
-  field(:INT, 1)
-  field(:FLOAT, 2)
-  field(:BOOL, 3)
-  field(:DATETIME, 4)
+  field :STRING, 0
+  field :INT, 1
+  field :FLOAT, 2
+  field :BOOL, 3
+  field :DATETIME, 4
 end
 
 defmodule Api.SchemaNode do
@@ -336,15 +357,15 @@ defmodule Api.SchemaNode do
         }
   defstruct [:predicate, :type, :index, :tokenizer, :reverse, :count, :list, :upsert, :lang]
 
-  field(:predicate, 1, type: :string)
-  field(:type, 2, type: :string)
-  field(:index, 3, type: :bool)
-  field(:tokenizer, 4, repeated: true, type: :string)
-  field(:reverse, 5, type: :bool)
-  field(:count, 6, type: :bool)
-  field(:list, 7, type: :bool)
-  field(:upsert, 8, type: :bool)
-  field(:lang, 9, type: :bool)
+  field :predicate, 1, type: :string
+  field :type, 2, type: :string
+  field :index, 3, type: :bool
+  field :tokenizer, 4, repeated: true, type: :string
+  field :reverse, 5, type: :bool
+  field :count, 6, type: :bool
+  field :list, 7, type: :bool
+  field :upsert, 8, type: :bool
+  field :lang, 9, type: :bool
 end
 
 defmodule Api.LoginRequest do
@@ -358,9 +379,9 @@ defmodule Api.LoginRequest do
         }
   defstruct [:userid, :password, :refresh_token]
 
-  field(:userid, 1, type: :string)
-  field(:password, 2, type: :string)
-  field(:refresh_token, 3, type: :string)
+  field :userid, 1, type: :string
+  field :password, 2, type: :string
+  field :refresh_token, 3, type: :string
 end
 
 defmodule Api.Jwt do
@@ -373,8 +394,8 @@ defmodule Api.Jwt do
         }
   defstruct [:access_jwt, :refresh_jwt]
 
-  field(:access_jwt, 1, type: :string)
-  field(:refresh_jwt, 2, type: :string)
+  field :access_jwt, 1, type: :string
+  field :refresh_jwt, 2, type: :string
 end
 
 defmodule Api.Dgraph.Service do

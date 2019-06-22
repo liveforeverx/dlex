@@ -1,3 +1,9 @@
+# 0.2.0
+
+* fix leaking of gun connections on timeouts
+* add `transport` option, which specifies if `grpc` or `http` transport should be used
+* make `grpc` dependencies optional, so you can choose based on transport the dependencies
+
 # 0.1.3
 
 * add support to alter table in the same format (json) as it queried. Now you can use output of
