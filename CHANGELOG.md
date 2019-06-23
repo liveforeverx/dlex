@@ -1,3 +1,8 @@
+# 0.2.1
+
+* add support for upcoming `upsert` functionallity (only for `grpc`)
+* fix dependency missconfiguration in `v0.2.0`
+
 # 0.2.0
 
 * fix leaking of gun connections on timeouts

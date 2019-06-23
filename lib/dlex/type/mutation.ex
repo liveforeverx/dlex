@@ -19,13 +19,15 @@ defmodule Dlex.Type.Mutation do
 
   @impl true
   def encode(%{json: json} = query, _parameters, _opts) do
-    %Query{sub_type: sub_type, statement: statement, txn_context: txn} = query
+    %Query{sub_type: sub_type, statement: statement, condition: query, txn_context: txn} = query
+
     {commit, start_ts} = transaction_opts(txn)
     mutation_type = infer_type(statement)
     statement = format(mutation_type, statement, json)
     mutation_key = mutation_key(mutation_type, sub_type)
-    mutation = [{mutation_key, statement} | [start_ts: start_ts, commit_now: commit]]
-    Mutation.new(mutation)
+
+    mutation_opts = [query: query, start_ts: start_ts, commit_now: commit]
+    Mutation.new([{mutation_key, statement} | mutation_opts])
   end
 
   defp transaction_opts(%{start_ts: start_ts}), do: {false, start_ts}

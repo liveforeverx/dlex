@@ -4,7 +4,7 @@ defmodule Dlex.MixProject do
   def project do
     [
       app: :dlex,
-      version: "0.2.0",
+      version: "0.2.1",
       elixir: "~> 1.7",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
@@ -24,7 +24,7 @@ defmodule Dlex.MixProject do
   defp deps do
     [
       {:db_connection, "~> 2.1"},
-      {:grpc, "~> 0.3.1", optional: true},
+      {:grpc, "~> 0.3.1"},
       {:jason, "~> 1.0", optional: true},
       # {:mint, github: "liveforeverx/mint", branch: "double_wrapping", optional: true},
       # {:castore, "~> 0.1.0", optional: true},

@@ -18,7 +18,6 @@ Preffered and more performant option is to use `grpc`:
 def deps do
   [
     {:jason, "~> 1.0"},
-    {:grpc, "~> 0.3.1"},
     {:dlex, "~> 0.1.0"}
   ]
 end

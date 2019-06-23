@@ -165,21 +165,60 @@ defmodule Dlex do
 
     * `:timeout` - Call timeout (default: `#{@timeout}`)
   """
-  @spec mutate(conn, iodata | map, Keyword.t()) :: {:ok, map} | {:error, Dlex.Error.t() | term}
-  def mutate(conn, statement, opts \\ []) do
-    query = %Query{type: Type.Mutation, statement: statement}
+
+  @spec mutate(conn, iodata, iodata | map, Keyword.t()) ::
+          {:ok, map} | {:error, Dlex.Error.t() | term}
+
+  def mutate(conn, query, statement, opts) do
+    query = %Query{type: Type.Mutation, statement: statement, condition: query}
 
     with {:ok, _, result} <- DBConnection.prepare_execute(conn, query, %{}, opts),
          do: {:ok, result}
   end
 
   @doc """
+  The same as `Dlex.mutate(conn, "", mutation, [])`
+  """
+  def mutate(conn, statement), do: mutate(conn, "", statement, [])
+
+  @doc """
+  The same as `Dlex.mutate(conn, query, mutation, [])` or `Dlex.mutate(conn, "", mutation, opts)`
+  """
+  def mutate(conn, query, statement) when not is_list(statement),
+    do: mutate(conn, query, statement, [])
+
+  def mutate(conn, statement, opts) when is_list(opts),
+    do: mutate(conn, "", statement, opts)
+
+  @doc """
+  Runs a mutation and returns the result or raises `Dlex.Error` if there was an error.
+  See `mutate/4`.
+  """
+  @spec mutate!(conn, iodata, iodata | map, Keyword.t()) :: map | no_return
+  def mutate!(conn, query, statement, opts) do
+    case mutate(conn, query, statement, opts) do
+      {:ok, result} -> result
+      {:error, err} -> raise err
+    end
+  end
+
+  @doc """
   Runs a mutation and returns the result or raises `Dlex.Error` if there was an error.
   See `mutate/3`.
   """
-  @spec mutate!(conn, iodata | map, Keyword.t()) :: map
-  def mutate!(conn, statement, opts \\ []) do
-    case mutate(conn, statement, opts) do
+  def mutate!(conn, query_or_statement, statement_or_opts) do
+    case mutate(conn, query_or_statement, statement_or_opts) do
+      {:ok, result} -> result
+      {:error, err} -> raise err
+    end
+  end
+
+  @doc """
+  Runs a mutation and returns the result or raises `Dlex.Error` if there was an error.
+  See `mutate/2`.
+  """
+  def mutate!(conn, statement) do
+    case mutate(conn, nil, statement, []) do
       {:ok, result} -> result
       {:error, err} -> raise err
     end
@@ -223,20 +262,61 @@ defmodule Dlex do
 
   """
   @spec delete(conn, iodata | map, Keyword.t()) :: {:ok, map} | {:error, Dlex.Error.t() | term}
-  def delete(conn, statement, opts \\ []) do
-    query = %Query{type: Type.Mutation, sub_type: :deletion, statement: statement}
+  def delete(conn, condition, statement, opts) do
+    query = %Query{
+      type: Type.Mutation,
+      sub_type: :deletion,
+      statement: statement,
+      condition: condition
+    }
 
     with {:ok, _, result} <- DBConnection.prepare_execute(conn, query, %{}, opts),
          do: {:ok, result}
   end
 
   @doc """
+  The same as `Dlex.delete(conn, "", deletion, [])`
+  """
+  def delete(conn, statement), do: delete(conn, "", statement, [])
+
+  @doc """
+  The same as `Dlex.delete(conn, query, deletion, [])` or `Dlex.delete(conn, "", deletion, opts)`
+  """
+  def delete(conn, query, statement) when not is_list(statement),
+    do: delete(conn, query, statement, [])
+
+  def delete(conn, statement, opts) when is_list(opts),
+    do: delete(conn, "", statement, opts)
+
+  @doc """
+  Runs a mutation with delete target and returns the result or raises `Dlex.Error` if there was
+  an error. See `delete/4`.
+  """
+  @spec delete!(conn, iodata, iodata | map, Keyword.t()) :: map | no_return
+  def delete!(conn, query, statement, opts) do
+    case delete(conn, query, statement, opts) do
+      {:ok, result} -> result
+      {:error, err} -> raise err
+    end
+  end
+
+  @doc """
   Runs a mutation with delete target and returns the result or raises `Dlex.Error` if there was
   an error. See `delete/3`.
   """
-  @spec delete!(conn, iodata | map, Keyword.t()) :: map | no_return
-  def delete!(conn, statement, opts \\ []) do
-    case delete(conn, statement, opts) do
+  def delete!(conn, query_or_statement, statement_or_opts) do
+    case delete(conn, query_or_statement, statement_or_opts) do
+      {:ok, result} -> result
+      {:error, err} -> raise err
+    end
+  end
+
+  @doc """
+  Runs a mutation with delete target and returns the result or raises `Dlex.Error` if there was
+  an error. See `delete/2`.
+  """
+  def delete!(conn, statement) do
+    case delete(conn, nil, statement, []) do
       {:ok, result} -> result
       {:error, err} -> raise err
     end

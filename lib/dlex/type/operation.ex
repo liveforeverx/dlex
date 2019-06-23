@@ -15,7 +15,9 @@ defmodule Dlex.Type.Operation do
     %{query | statement: build(statement)}
   end
 
-  defp build(statement) when is_binary(statement), do: defaults(%{schema: statement})
+  defp build(statement) when is_binary(statement) or is_list(statement),
+    do: defaults(%{schema: statement})
+
   defp build(statement) when is_map(statement), do: defaults(statement)
 
   def defaults(map) do

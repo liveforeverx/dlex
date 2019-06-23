@@ -86,7 +86,7 @@ defmodule DlexTest do
       "type" => "string"
     }
 
-    Dlex.alter!(pid, %{schema: surname_predicate})
+    Dlex.alter!(pid, [surname_predicate])
     {:ok, %{"schema" => schema}} = Dlex.query_schema(pid)
     assert surname_predicate == Enum.find(schema, &(&1["predicate"] == "surname"))
   end
@@ -94,6 +94,26 @@ defmodule DlexTest do
   test "malformed query", %{pid: pid} do
     assert {:error, error} = Dlex.query(pid, "{ fail(func: eq(name, [])) { uid } } ")
     assert String.contains?(error.reason.message, "Expecting argument name")
+  end
+
+  test "upsert", %{pid: pid} do
+    predicate = %{
+      "upsert" => true,
+      "index" => true,
+      "predicate" => "email",
+      "tokenizer" => ["exact"],
+      "type" => "string"
+    }
+
+    Dlex.alter!(pid, [predicate])
+    Dlex.mutate!(pid, %{"name" => "upsert_test", "email" => "foo@bar"})
+
+    query = ~s|{ me(func: eq(email, "foo@bar")) { v as uid } }|
+    Dlex.mutate!(pid, query, ~s|uid(v) <email> "foo@bar_changed" .|, return_json: true)
+    %{"email" => "foo@bar_changed"} = get_by_name(pid, "upsert_test")
+
+    Dlex.mutate!(pid, query, %{"email" => "foo@bar_changed2"}, return_json: true)
+    %{"email" => "foo@bar_changed2"} = get_by_name(pid, "upsert_test")
   end
 
   def uid_get(conn, uid) do

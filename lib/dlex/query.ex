@@ -5,13 +5,14 @@ defmodule Dlex.Query do
           type: Diex.Type.Alter | Diex.Type.Mutation | Diex.Type.Query,
           sub_type: atom,
           statement: map | String.t(),
+          condition: String.t(),
           parameters: any,
           txn_context: Diex.Api.TxnContext.t(),
           json: atom,
           request: any
         }
 
-  defstruct [:type, :sub_type, :statement, :parameters, :json, :request, :txn_context]
+  defstruct [:type, :sub_type, :statement, :condition, :parameters, :json, :request, :txn_context]
 
   @type request :: any
   @callback request(t) :: request
