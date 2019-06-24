@@ -25,7 +25,8 @@ defmodule Dlex do
     * `:keepalive` - Keepalive option for http client (default: `:infinity`)
     * `:json_library` - Specifies json library to use (default: `Jason`)
     * `:transport` - Specify if grpc or http should be used (default: `grpc`)
-    * `:timeout` - Connection timeout in milliseconds (default: `#{@timeout}`);
+    * `:connect_timeout` - Connection timeout in milliseconds (default: `#{@timeout}`);
+    * `:timeout` - Call timeout in milliseconds (default: `#{@timeout}`);
 
   ### SSL/TLS configuration (automaticly enabled, if required files provided)
 
@@ -64,6 +65,7 @@ defmodule Dlex do
     |> Keyword.put_new(:hostname, System.get_env("DGRAPH_HOST") || "localhost")
     |> Keyword.put_new(:port, System.get_env("DGRAPH_PORT") || 9080)
     |> Keyword.put_new(:transport, :grpc)
+    |> Keyword.put_new(:connect_timeout, @timeout)
     |> Keyword.put_new(:timeout, @timeout)
     |> Keyword.put_new(:keepalive, @default_keepalive)
     |> Keyword.put_new(:idle_interval, @idle_interval)

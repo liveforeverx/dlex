@@ -30,7 +30,7 @@ def deps do
   [
     {:jason, "~> 1.0"},
     {:castore, "~> 0.1.0", optional: true},
-    {:mint, github: "liveforeverx/mint", branch: "double_wrapping"},
+    {:mint, github: "ericmj/mint", branch: "master"},
     {:dlex, "~> 0.1.0"}
   ]
 end
@@ -59,15 +59,15 @@ Modification of schema supported with string and map form (which is returned by 
 ```
 Dlex.alter(conn, "name: string @index(term, fulltext, trigram) @lang .")
 # equivalent to in map form
-Dlex.alter(conn, %{
-  schema: %{
+Dlex.alter(conn, [
+  %{
     "predicate" => "name",
     "type" => "string",
     "index" => true,
     "lang" => true,
     "tokenizer" => ["term", "fulltext", "trigram"]
   }
-})
+])
 ```
 
 ## Developers guide

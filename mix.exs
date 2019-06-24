@@ -26,7 +26,7 @@ defmodule Dlex.MixProject do
       {:db_connection, "~> 2.1"},
       {:grpc, "~> 0.3.1"},
       {:jason, "~> 1.0", optional: true},
-      # {:mint, github: "liveforeverx/mint", branch: "double_wrapping", optional: true},
+      # {:mint, github: "ericmj/mint", branch: "master", optional: true},
       # {:castore, "~> 0.1.0", optional: true},
       {:ecto, "~> 3.1", optional: true},
       {:earmark, "~> 1.0", only: :dev},
