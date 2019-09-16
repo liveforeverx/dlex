@@ -20,10 +20,6 @@ defmodule Dlex.Type.Query do
   end
 
   @impl true
-  def decode(_, %Response{json: "{}", schema: schema}, _) do
-    Enum.map(schema, &Map.delete(&1, :__struct__))
-  end
-
   def decode(%{json: json_lib}, %Response{json: json, txn: %TxnContext{aborted: false} = _txn}, _) do
     with json when is_binary(json) <- json, do: json_lib.decode!(json)
   end

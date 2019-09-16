@@ -5,21 +5,23 @@ defmodule Api.Request do
   use Protobuf, syntax: :proto3
 
   @type t :: %__MODULE__{
+          start_ts: non_neg_integer,
           query: String.t(),
           vars: %{String.t() => String.t()},
-          start_ts: non_neg_integer,
-          lin_read: Api.LinRead.t() | nil,
           read_only: boolean,
-          best_effort: boolean
+          best_effort: boolean,
+          mutations: [Api.Mutation.t()],
+          commit_now: boolean
         }
-  defstruct [:query, :vars, :start_ts, :lin_read, :read_only, :best_effort]
+  defstruct [:start_ts, :query, :vars, :read_only, :best_effort, :mutations, :commit_now]
 
-  field :query, 1, type: :string
-  field :vars, 2, repeated: true, type: Api.Request.VarsEntry, map: true
-  field :start_ts, 13, type: :uint64
-  field :lin_read, 14, type: Api.LinRead
-  field :read_only, 15, type: :bool
-  field :best_effort, 16, type: :bool
+  field :start_ts, 1, type: :uint64
+  field :query, 4, type: :string
+  field :vars, 5, repeated: true, type: Api.Request.VarsEntry, map: true
+  field :read_only, 6, type: :bool
+  field :best_effort, 7, type: :bool
+  field :mutations, 12, repeated: true, type: Api.Mutation
+  field :commit_now, 13, type: :bool
 end
 
 defmodule Api.Request.VarsEntry do
@@ -42,35 +44,19 @@ defmodule Api.Response do
 
   @type t :: %__MODULE__{
           json: binary,
-          schema: [Api.SchemaNode.t()],
           txn: Api.TxnContext.t() | nil,
-          latency: Api.Latency.t() | nil
+          latency: Api.Latency.t() | nil,
+          uids: %{String.t() => String.t()}
         }
-  defstruct [:json, :schema, :txn, :latency]
+  defstruct [:json, :txn, :latency, :uids]
 
   field :json, 1, type: :bytes
-  field :schema, 2, repeated: true, type: Api.SchemaNode, deprecated: true
-  field :txn, 3, type: Api.TxnContext
-  field :latency, 12, type: Api.Latency
+  field :txn, 2, type: Api.TxnContext
+  field :latency, 3, type: Api.Latency
+  field :uids, 12, repeated: true, type: Api.Response.UidsEntry, map: true
 end
 
-defmodule Api.Assigned do
-  @moduledoc false
-  use Protobuf, syntax: :proto3
-
-  @type t :: %__MODULE__{
-          uids: %{String.t() => String.t()},
-          context: Api.TxnContext.t() | nil,
-          latency: Api.Latency.t() | nil
-        }
-  defstruct [:uids, :context, :latency]
-
-  field :uids, 1, repeated: true, type: Api.Assigned.UidsEntry, map: true
-  field :context, 2, type: Api.TxnContext
-  field :latency, 12, type: Api.Latency
-end
-
-defmodule Api.Assigned.UidsEntry do
+defmodule Api.Response.UidsEntry do
   @moduledoc false
   use Protobuf, map: true, syntax: :proto3
 
@@ -93,36 +79,21 @@ defmodule Api.Mutation do
           delete_json: binary,
           set_nquads: binary,
           del_nquads: binary,
-          query: String.t(),
           set: [Api.NQuad.t()],
           del: [Api.NQuad.t()],
-          start_ts: non_neg_integer,
-          commit_now: boolean,
-          ignore_index_conflict: boolean
+          cond: String.t(),
+          commit_now: boolean
         }
-  defstruct [
-    :set_json,
-    :delete_json,
-    :set_nquads,
-    :del_nquads,
-    :query,
-    :set,
-    :del,
-    :start_ts,
-    :commit_now,
-    :ignore_index_conflict
-  ]
+  defstruct [:set_json, :delete_json, :set_nquads, :del_nquads, :set, :del, :cond, :commit_now]
 
   field :set_json, 1, type: :bytes
   field :delete_json, 2, type: :bytes
   field :set_nquads, 3, type: :bytes
   field :del_nquads, 4, type: :bytes
-  field :query, 5, type: :string
-  field :set, 10, repeated: true, type: Api.NQuad
-  field :del, 11, repeated: true, type: Api.NQuad
-  field :start_ts, 13, type: :uint64
+  field :set, 5, repeated: true, type: Api.NQuad
+  field :del, 6, repeated: true, type: Api.NQuad
+  field :cond, 9, type: :string
   field :commit_now, 14, type: :bool
-  field :ignore_index_conflict, 15, type: :bool
 end
 
 defmodule Api.Operation do
@@ -177,17 +148,15 @@ defmodule Api.TxnContext do
           commit_ts: non_neg_integer,
           aborted: boolean,
           keys: [String.t()],
-          preds: [String.t()],
-          lin_read: Api.LinRead.t() | nil
+          preds: [String.t()]
         }
-  defstruct [:start_ts, :commit_ts, :aborted, :keys, :preds, :lin_read]
+  defstruct [:start_ts, :commit_ts, :aborted, :keys, :preds]
 
   field :start_ts, 1, type: :uint64
   field :commit_ts, 2, type: :uint64
   field :aborted, 3, type: :bool
   field :keys, 4, repeated: true, type: :string
   field :preds, 5, repeated: true, type: :string
-  field :lin_read, 13, type: Api.LinRead
 end
 
 defmodule Api.Check do
@@ -210,42 +179,6 @@ defmodule Api.Version do
   field :tag, 1, type: :string
 end
 
-defmodule Api.LinRead do
-  @moduledoc false
-  use Protobuf, syntax: :proto3
-
-  @type t :: %__MODULE__{
-          ids: %{non_neg_integer => non_neg_integer},
-          sequencing: atom | integer
-        }
-  defstruct [:ids, :sequencing]
-
-  field :ids, 1, repeated: true, type: Api.LinRead.IdsEntry, map: true
-  field :sequencing, 2, type: Api.LinRead.Sequencing, enum: true
-end
-
-defmodule Api.LinRead.IdsEntry do
-  @moduledoc false
-  use Protobuf, map: true, syntax: :proto3
-
-  @type t :: %__MODULE__{
-          key: non_neg_integer,
-          value: non_neg_integer
-        }
-  defstruct [:key, :value]
-
-  field :key, 1, type: :uint32
-  field :value, 2, type: :uint64
-end
-
-defmodule Api.LinRead.Sequencing do
-  @moduledoc false
-  use Protobuf, enum: true, syntax: :proto3
-
-  field :CLIENT_SIDE, 0
-  field :SERVER_SIDE, 1
-end
-
 defmodule Api.Latency do
   @moduledoc false
   use Protobuf, syntax: :proto3
@@ -253,13 +186,15 @@ defmodule Api.Latency do
   @type t :: %__MODULE__{
           parsing_ns: non_neg_integer,
           processing_ns: non_neg_integer,
-          encoding_ns: non_neg_integer
+          encoding_ns: non_neg_integer,
+          assign_timestamp_ns: non_neg_integer
         }
-  defstruct [:parsing_ns, :processing_ns, :encoding_ns]
+  defstruct [:parsing_ns, :processing_ns, :encoding_ns, :assign_timestamp_ns]
 
   field :parsing_ns, 1, type: :uint64
   field :processing_ns, 2, type: :uint64
   field :encoding_ns, 3, type: :uint64
+  field :assign_timestamp_ns, 4, type: :uint64
 end
 
 defmodule Api.NQuad do
@@ -295,7 +230,7 @@ defmodule Api.Value do
         }
   defstruct [:val]
 
-  oneof(:val, 0)
+  oneof :val, 0
   field :default_val, 1, type: :string, oneof: 0
   field :bytes_val, 2, type: :bytes, oneof: 0
   field :int_val, 3, type: :int64, oneof: 0
@@ -340,34 +275,6 @@ defmodule Api.Facet.ValType do
   field :DATETIME, 4
 end
 
-defmodule Api.SchemaNode do
-  @moduledoc false
-  use Protobuf, syntax: :proto3
-
-  @type t :: %__MODULE__{
-          predicate: String.t(),
-          type: String.t(),
-          index: boolean,
-          tokenizer: [String.t()],
-          reverse: boolean,
-          count: boolean,
-          list: boolean,
-          upsert: boolean,
-          lang: boolean
-        }
-  defstruct [:predicate, :type, :index, :tokenizer, :reverse, :count, :list, :upsert, :lang]
-
-  field :predicate, 1, type: :string
-  field :type, 2, type: :string
-  field :index, 3, type: :bool
-  field :tokenizer, 4, repeated: true, type: :string
-  field :reverse, 5, type: :bool
-  field :count, 6, type: :bool
-  field :list, 7, type: :bool
-  field :upsert, 8, type: :bool
-  field :lang, 9, type: :bool
-end
-
 defmodule Api.LoginRequest do
   @moduledoc false
   use Protobuf, syntax: :proto3
@@ -402,12 +309,11 @@ defmodule Api.Dgraph.Service do
   @moduledoc false
   use GRPC.Service, name: "api.Dgraph"
 
-  rpc(:Login, Api.LoginRequest, Api.Response)
-  rpc(:Query, Api.Request, Api.Response)
-  rpc(:Mutate, Api.Mutation, Api.Assigned)
-  rpc(:Alter, Api.Operation, Api.Payload)
-  rpc(:CommitOrAbort, Api.TxnContext, Api.TxnContext)
-  rpc(:CheckVersion, Api.Check, Api.Version)
+  rpc :Login, Api.LoginRequest, Api.Response
+  rpc :Query, Api.Request, Api.Response
+  rpc :Alter, Api.Operation, Api.Payload
+  rpc :CommitOrAbort, Api.TxnContext, Api.TxnContext
+  rpc :CheckVersion, Api.Check, Api.Version
 end
 
 defmodule Api.Dgraph.Stub do
