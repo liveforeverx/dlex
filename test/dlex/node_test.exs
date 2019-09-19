@@ -17,16 +17,28 @@ defmodule Dlex.NodeTest do
     end
 
     test "alter" do
-      assert [
-               %{
-                 "index" => true,
-                 "predicate" => "user.name",
-                 "tokenizer" => ["term"],
-                 "type" => "string"
-               },
-               %{"predicate" => "user.age", "type" => "int"},
-               %{"predicate" => "user.friends", "type" => "uid"}
-             ] == User.__schema__(:alter)
+      assert %{ 
+              "schema" => [
+                 %{
+                   "index" => true,
+                   "predicate" => "user.name",
+                   "tokenizer" => ["term"],
+                   "type" => "string"
+                 },
+                 %{"predicate" => "user.age", "type" => "int"},
+                 %{"predicate" => "user.friends", "type" => "uid"}
+              ],
+              "types" => [
+                %{
+                  "fields" => [
+                    %{"name" => "user.friends", "type" => "uid"},
+                    %{"name" => "user.age", "type" => "integer"},
+                    %{"name" => "user.name", "type" => "string"}
+                  ],
+                  "name" => "type.user"
+                }
+              ]
+            } == User.__schema__(:alter)
     end
 
     test "transformation callbacks" do
