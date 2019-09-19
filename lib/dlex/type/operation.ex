@@ -40,8 +40,39 @@ defmodule Dlex.Type.Operation do
 
   def encode_schema(string) when is_binary(string), do: string
 
-  def encode_schema(schemas) when is_list(schemas) or is_map(schemas) do
+  def encode_schema(schemas) when is_map(schemas) do
+    encoded_preds = encode_schema(schemas["schema"])
+    encoded_types = encode_types(schemas["types"])
+
+    """
+      #{encoded_types}
+
+      #{encoded_preds}
+    """
+  end
+
+  def encode_schema(schemas) when is_list(schemas) do
     schemas |> List.wrap() |> Enum.map_join("\n", &transform_schema/1)
+  end
+
+  def encode_types([]), do: ""
+
+  def encode_types(types) do 
+    types |>
+      List.wrap() |>
+      Enum.map_join("\n", &transform_type/1)
+  end
+
+  defp transform_type(%{"name" => name, "fields" => fields}) do
+    fields_str = Enum.map_join(fields, "\n", fn(field) -> 
+      "#{field["name"]}: #{field["type"]}"
+    end)
+
+    """
+      type #{name}{
+        #{fields_str}
+      }
+    """
   end
 
   defp transform_schema(%{"predicate" => predicate, "type" => type} = entry) do
