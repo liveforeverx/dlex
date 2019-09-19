@@ -7,6 +7,8 @@ transactions and connection pooling.
 Small, efficient codebase. Aims for a full Dgraph support. Supports transactions (starting from Dgraph version: `1.0.9`),
 delete mutations and low-level parameterized queries. DSL is planned.
 
+Now supports the new dgraph 1.1.x [Type System](https://docs.dgraph.io/master/query-language/#type-system). 
+
 ## Installation
 
 If [available in Hex](https://hex.pm/docs/publish), the package can be installed

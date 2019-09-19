@@ -2,7 +2,7 @@ defmodule Dlex.Type.Mutation do
   @moduledoc false
 
   alias Dlex.{Adapter, Query, Utils}
-  alias Dlex.Api.{Assigned, Mutation}
+  alias Dlex.Api.{Response, Mutation, Request}
 
   @behaviour Dlex.Type
 
@@ -26,8 +26,13 @@ defmodule Dlex.Type.Mutation do
     statement = format(mutation_type, statement, json)
     mutation_key = mutation_key(mutation_type, sub_type)
 
-    mutation_opts = [query: query, start_ts: start_ts, commit_now: commit]
-    Mutation.new([{mutation_key, statement} | mutation_opts])
+    mut = Mutation.new([{mutation_key, statement}, {:commit_now, commit}])
+    Request.new([
+      commit_now: commit,
+      start_ts: start_ts,
+      mutations: [mut],
+      query: query
+    ])
   end
 
   defp transaction_opts(%{start_ts: start_ts}), do: {false, start_ts}
@@ -46,7 +51,7 @@ defmodule Dlex.Type.Mutation do
   defp mutation_key(:nquads, :deletion), do: :del_nquads
 
   @impl true
-  def decode(%Query{statement: statement} = _query, %Assigned{uids: uids} = _result, opts) do
+  def decode(%Query{statement: statement} = _query, %Response{uids: uids} = _result, opts) do
     if opts[:return_json], do: Utils.replace_ids(statement, uids), else: uids
   end
 end

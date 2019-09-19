@@ -78,7 +78,7 @@ defmodule Dlex.Adapters.GRPC do
 
   @impl true
   def mutate(channel, request, _json_lib, opts) do
-    ApiStub.mutate(channel, request, opts)
+    ApiStub.query(channel, request, opts)
   end
 
   @impl true

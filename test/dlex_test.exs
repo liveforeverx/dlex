@@ -6,8 +6,31 @@ defmodule DlexTest do
     {:ok, pid} = Dlex.start_link(pool_size: 2)
 
     Dlex.alter!(pid, %{drop_all: true})
-    alter = "name: string @index(term) ."
-    Dlex.alter!(pid, alter)
+    schema = """
+      type Client {
+        name: string
+        email: string
+        balance: float
+      }
+
+      type CastMember {
+        name: string
+        surname: string
+      }
+
+      type Film {
+        name: string
+        release_date: string
+        starring: [CastMember]
+      }  
+
+      release_date: string .
+      starring: [uid] .
+      email: string @index(term, hash) .
+      name: string @index(term) .
+      surname: string @index(term) .
+    """
+    Dlex.alter!(pid, schema)
     %{pid: pid}
   end
 
@@ -18,12 +41,15 @@ defmodule DlexTest do
 
   @mutation_nquads """
   _:luke <name> "Luke Skywalker" .
+  _:luke <dgraph.type> "CastMember" .
   _:leia <name> "Princess Leia" .
+  _:leia <dgraph.type> "CastMember" .
 
   _:sw1 <name> "Star Wars: Episode IV - A New Hope" .
   _:sw1 <release_date> "1977-05-25" .
   _:sw1 <starring> _:luke .
   _:sw1 <starring> _:leia .
+  _:sw1 <dgraph.type> "Film" .
   """
 
   test "mutation json", %{pid: pid} do
@@ -41,21 +67,21 @@ defmodule DlexTest do
   end
 
   test "mutation nquads", %{pid: pid} do
-    assert %{"luke" => uid_luke, "leia" => uid_leia, "sw1" => uid_sw1} =
-             Dlex.mutate!(pid, @mutation_nquads)
+    assert %{"luke" => uid_luke, "leia" => uid_leia, "sw1" => uid_sw1} = 
+      Dlex.mutate!(pid, @mutation_nquads)
 
     assert %{"name" => "Luke Skywalker"} == uid_get(pid, uid_luke)
   end
 
   test "query with parameters", %{pid: pid} do
-    json = %{"name" => "Foo", "surname" => "bar"}
+    json = %{"name" => "Foo", "surname" => "bar", "dgraph.type" => "CastMember"}
     assert %{"uid" => uid} = Dlex.mutate!(pid, json, return_json: true)
     %{"uid" => ^uid, "name" => "Foo", "surname" => "bar"} = get_by_name(pid, "Foo")
   end
 
   test "basic transaction test", %{pid: pid} do
-    Dlex.mutate!(pid, %{"name" => "client1", "balance" => 1000})
-    Dlex.mutate!(pid, %{"name" => "client2", "balance" => 1000})
+    Dlex.mutate!(pid, %{"dgraph.type" => "Client", "name" => "client1", "balance" => 1000})
+    Dlex.mutate!(pid, %{"dgraph.type" => "Client", "name" => "client2", "balance" => 1000})
 
     tasks = for i <- [1, 2], do: Task.async(fn -> move_balance(pid, i * 100) end)
     results = for task <- tasks, do: Task.await(task)
@@ -63,7 +89,14 @@ defmodule DlexTest do
     assert [
              {:ok, _},
              {:error,
-              %Dlex.Error{reason: %{message: "Transaction has been aborted. Please retry."}}}
+               %Dlex.Error{
+                action: :commit,
+                reason: %GRPC.RPCError{
+                  message: "Transaction has been aborted. Please retry",
+                  status: 10
+                }
+               }
+             }
            ] = results
 
     %{"balance" => balance1} = get_by_name(pid, "client1")
@@ -72,7 +105,7 @@ defmodule DlexTest do
   end
 
   test "deletion", %{pid: pid} do
-    assert %{"uid" => uid} = Dlex.mutate!(pid, %{"name" => "deletion_test"}, return_json: true)
+    assert %{"uid" => uid} = Dlex.mutate!(pid, %{"name" => "deletion_test", "dgraph.type" => "CastMember"}, return_json: true)
     assert %{"uid" => ^uid} = get_by_name(pid, "deletion_test")
     assert Dlex.delete!(pid, %{"uid" => uid})
     assert %{"all" => []} = get_by_name(pid, "deletion_test")
@@ -93,7 +126,7 @@ defmodule DlexTest do
 
   test "malformed query", %{pid: pid} do
     assert {:error, error} = Dlex.query(pid, "{ fail(func: eq(name, [])) { uid } } ")
-    assert String.contains?(error.reason.message, "Expecting argument name")
+    assert String.contains?(error.reason.message, "Empty Argument")
   end
 
   test "upsert", %{pid: pid} do
@@ -106,14 +139,15 @@ defmodule DlexTest do
     }
 
     Dlex.alter!(pid, [predicate])
-    Dlex.mutate!(pid, %{"name" => "upsert_test", "email" => "foo@bar"})
+    Dlex.mutate!(pid, %{"name" => "upsert_test", "email" => "foo@bar", "dgraph.type" => "Client"})
 
-    query = ~s|{ me(func: eq(email, "foo@bar")) { v as uid } }|
+    query = ~s|{ v as var(func: eq(email, "foo@bar")) }|
     Dlex.mutate!(pid, query, ~s|uid(v) <email> "foo@bar_changed" .|, return_json: true)
     %{"email" => "foo@bar_changed"} = get_by_name(pid, "upsert_test")
 
-    Dlex.mutate!(pid, query, %{"email" => "foo@bar_changed2"}, return_json: true)
-    %{"email" => "foo@bar_changed2"} = get_by_name(pid, "upsert_test")
+    #JSON upsert not supported in dgraph 1.1.x (yet)
+    #Dlex.mutate!(pid, query, %{"uid" => "uid(v)", "email" => "foo@bar_changed2"}, return_json: true)
+    #%{"email" => "foo@bar_changed2"} = get_by_name(pid, "upsert_test")
   end
 
   def uid_get(conn, uid) do

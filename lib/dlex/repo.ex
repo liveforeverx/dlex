@@ -137,7 +137,7 @@ defmodule Dlex.Repo do
 
   defp encode_kv({_key, nil}, _), do: []
 
-  defp encode_kv({:uid, value}, struct), do: [{"uid", value}, {source(struct), "true"}]
+  defp encode_kv({:uid, value}, struct), do: [{"uid", value}, {"dgraph.type", source(struct)}]
 
   defp encode_kv({key, value}, struct) do
     case field(struct, key) do
@@ -166,7 +166,7 @@ defmodule Dlex.Repo do
   Get by uid
   """
   def get(conn, %{lookup: lookup}, uid) do
-    statement = ["{uid_get(func: uid(", uid, ")) {uid expand(_all_)}}"]
+    statement = ["{uid_get(func: uid(", uid, ")) {uid dgraph.type expand(_all_)}}"]
 
     with {:ok, %{"uid_get" => nodes}} <- Dlex.query(conn, statement) do
       case nodes do
@@ -177,9 +177,9 @@ defmodule Dlex.Repo do
   end
 
   defp decode(map, lookup) when is_map(map) and is_map(lookup) do
-    case Enum.find(map, fn {key, _} -> String.starts_with?(key, "type.") end) do
+    case Enum.find(map, fn {key, _} -> key == "dgraph.type" end) do
       nil -> {:error, {:untyped, map}}
-      {type, _} -> decode(map, Map.get(lookup, type))
+      {_, [type]} -> decode(map, Map.get(lookup, type))
     end
   end
 
@@ -217,14 +217,20 @@ defmodule Dlex.Repo do
   Alter schema for modules
   """
   def alter_schema(conn, snapshot) do
-    with {:ok, %{"schema" => schema}} <- Dlex.query_schema(conn),
-         do: do_alter_schema(conn, schema, snapshot)
+    with {:ok, sch} <- Dlex.query_schema(conn), do: do_alter_schema(conn, sch, snapshot)
   end
 
-  defp do_alter_schema(conn, schema, snapshot) do
-    case snapshot -- schema do
-      [] -> {:ok, 0}
-      alter -> with {:ok, _} <- Dlex.alter(conn, %{schema: alter}), do: {:ok, length(alter)}
+  defp do_alter_schema(conn, %{"schema" => schema, "types" => types}, snapshot) do
+    delta = %{
+      "schema" => (snapshot["schema"] -- schema),
+      "types" => (snapshot["types"] -- types)
+    }
+
+    delta_l = length(delta["schema"]) + length(delta["types"])
+
+    case delta do
+      %{"schema" => [], "types" => []} -> {:ok, 0}
+      alter -> with {:ok, _} <- Dlex.alter(conn, %{schema: alter}), do: {:ok, delta_l}
     end
   end
 
@@ -238,7 +244,13 @@ defmodule Dlex.Repo do
     |> MapSet.to_list()
     |> List.wrap()
     |> expand_modules()
-    |> Enum.flat_map(& &1.__schema__(:alter))
+    |> Enum.map(& &1.__schema__(:alter))
+    |> Enum.reduce(%{"types" => [], "schema" => []}, fn(mod_sch, acc) ->
+      %{
+        "types" => Enum.concat(acc["types"], mod_sch["types"]),
+        "schema" => Enum.concat(acc["schema"], mod_sch["schema"])
+      }
+    end)
   end
 
   defp expand_modules(modules) do
