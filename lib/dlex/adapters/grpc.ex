@@ -3,6 +3,7 @@ defmodule Dlex.Adapters.GRPC do
 
   alias GRPC.Stub
   alias Dlex.Api.Dgraph.Stub, as: ApiStub
+  alias Dlex.Api.Check
   alias Dlex.Error
 
   require Logger
@@ -60,12 +61,10 @@ defmodule Dlex.Adapters.GRPC do
   @impl true
   def ping(%{adapter_payload: %{conn_pid: conn_pid}} = channel) do
     # check if the server is up and wait 5s seconds before disconnect
-    stream = :gun.head(conn_pid, "/")
-    response = :gun.await(conn_pid, stream, 5_000)
-
+    response = ApiStub.check_version(channel, Check.new(), [])
     # return based on response
     case response do
-      {:response, :fin, 200, _} -> {:ok, channel}
+      {:ok, _} -> {:ok, channel}
       {:error, reason} -> {:error, reason}
       _ -> :ok
     end
