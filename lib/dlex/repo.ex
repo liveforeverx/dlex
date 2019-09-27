@@ -234,6 +234,10 @@ defmodule Dlex.Repo do
     end
   end
 
+  defp do_alter_schema(conn, sch, snapshot) do
+    do_alter_schema(conn, Map.put_new(sch, "types", []), snapshot)
+  end
+
   @doc """
   Generate snapshot for running meta process
   """
