@@ -59,11 +59,9 @@ defmodule Dlex.Adapters.GRPC do
   end
 
   @impl true
-  def ping(%{adapter_payload: %{conn_pid: conn_pid}} = channel) do
+  def ping(channel) do
     # check if the server is up and wait 5s seconds before disconnect
-    response = ApiStub.check_version(channel, Check.new(), [])
-    # return based on response
-    case response do
+    case ApiStub.check_version(channel, Check.new(), timeout: 5_000) do
       {:ok, _} -> {:ok, channel}
       {:error, reason} -> {:error, reason}
       _ -> :ok

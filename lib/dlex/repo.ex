@@ -177,13 +177,13 @@ defmodule Dlex.Repo do
   end
 
   defp decode(map, lookup) when is_map(map) and is_map(lookup) do
-    case Enum.find(map, fn {key, _} -> key == "dgraph.type" end) do
-      nil -> {:error, {:untyped, map}}
-      {_, [type]} -> decode(map, Map.get(lookup, type))
+    with %{"dgraph.type" => [type_string]} <- map,
+         type when type != nil <- Map.get(lookup, type_string) do
+      decode(map, type)
+    else
+      _ -> {:error, {:untyped, map}}
     end
   end
-
-  defp decode(map, nil), do: {:error, {:untyped, map}}
 
   defp decode(map, type) do
     case decode_map(map, type) do
@@ -222,8 +222,8 @@ defmodule Dlex.Repo do
 
   defp do_alter_schema(conn, %{"schema" => schema, "types" => types}, snapshot) do
     delta = %{
-      "schema" => (snapshot["schema"] -- schema),
-      "types" => (snapshot["types"] -- types)
+      "schema" => snapshot["schema"] -- schema,
+      "types" => snapshot["types"] -- types
     }
 
     delta_l = length(delta["schema"]) + length(delta["types"])
@@ -245,7 +245,7 @@ defmodule Dlex.Repo do
     |> List.wrap()
     |> expand_modules()
     |> Enum.map(& &1.__schema__(:alter))
-    |> Enum.reduce(%{"types" => [], "schema" => []}, fn(mod_sch, acc) ->
+    |> Enum.reduce(%{"types" => [], "schema" => []}, fn mod_sch, acc ->
       %{
         "types" => Enum.concat(acc["types"], mod_sch["types"]),
         "schema" => Enum.concat(acc["schema"], mod_sch["schema"])

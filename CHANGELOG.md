@@ -1,3 +1,10 @@
+# 0.3.0
+
+As dgraph has breaking API change, this version supports DGraph only in version `1.1.0`, use
+dlex in version `0.2.1` for using with DGraph `1.0.X`.
+
+* support DGraph `1.1.0` (only for `grpc` at the moment)
+
 # 0.2.1
 
 * add support for upcoming `upsert` functionallity (only for `grpc`)
