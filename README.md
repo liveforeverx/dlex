@@ -74,6 +74,15 @@ Dlex.alter(conn, [
 
 ## Developers guide
 
+### Running tests
+
+1. Install dependencies `mix deps.get`
+2. Start the local dgraph server (requires Docker) `./start-server.sh`
+   This starts a local server bound to ports 9090 (GRPC) and 8090 (HTTP)
+3. Run `mix test`
+
+NOTE: You may stop the server using `./stop-server.sh`
+
 ### By updating api.proto
 
 #### Install development dependencies
