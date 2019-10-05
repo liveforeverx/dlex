@@ -1,5 +1,7 @@
 # Dlex
 
+[![Hex pm](http://img.shields.io/hexpm/v/dlex.svg?style=flat)](https://hex.pm/packages/dlex)
+
 Dlex is a gRPC based client for the [Dgraph](https://github.com/dgraph-io/dgraph) database in Elixir.
 It uses the [DBConnection](https://hexdocs.pm/db_connection/DBConnection.html) behaviour to support
 transactions and connection pooling.
