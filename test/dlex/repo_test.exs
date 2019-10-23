@@ -4,7 +4,7 @@ defmodule Dlex.RepoTest do
   alias Dlex.{TestRepo, User}
 
   setup_all do
-    {:ok, pid} = TestRepo.start_link()
+    {:ok, pid} = TestRepo.start_link(port: 9090)
     %{pid: pid}
   end
 

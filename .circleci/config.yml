@@ -1,0 +1,17 @@
+# Elixir CircleCI 2.0 configuration file
+version: 2
+jobs:
+  build:
+    docker:
+      - image: elixir:1.9.1
+      - image: dgraph/dgraph:v1.1.0
+        command: dgraph zero --port_offset=-2000 --my=localhost:3080
+      - image: dgraph/dgraph:v1.1.0
+        command: dgraph alpha --bindall --port_offset=10 --my=localhost:7090 --zero=localhost:3080
+    working_directory: ~/repo
+    steps:
+      - checkout
+      - run: mix local.hex --force  # install Hex locally (without prompt)
+      - run: mix local.rebar --force  # fetch a copy of rebar (without prompt)
+      - run: mix deps.get
+      - run: mix test
