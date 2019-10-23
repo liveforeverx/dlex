@@ -1,5 +1,6 @@
 # Dlex
 
+[![Hex pm](http://img.shields.io/hexpm/v/dlex.svg?style=flat)](https://hex.pm/packages/dlex)
 [![CircleCI](https://circleci.com/gh/draftedus/dlex.svg?style=svg)](https://circleci.com/gh/draftedus/dlex) 
 
 Dlex is a gRPC based client for the [Dgraph](https://github.com/dgraph-io/dgraph) database in Elixir.
