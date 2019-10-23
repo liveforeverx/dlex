@@ -2,9 +2,9 @@ defmodule DlexTest do
   use ExUnit.Case
 
   setup_all do
-    # {:ok, pid} = Dlex.start_link(pool_size: 2, port: 8080, transport: :http)
-    {:ok, pid} = Dlex.start_link(pool_size: 2)
 
+    # Setup our server
+    {:ok, pid} = Dlex.start_link(pool_size: 2, port: 9090)
     Dlex.alter!(pid, %{drop_all: true})
 
     schema = """
