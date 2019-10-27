@@ -41,7 +41,7 @@ defmodule Dlex.MixProject do
 
   defp package do
     [
-      maintainers: ["Dmitry Russ(Aleksandrov)"],
+      maintainers: ["Dmitry Russ(Aleksandrov)", "Eric Hagman"],
       licenses: ["Apache 2.0"],
       links: %{"Github" => "https://github.com/liveforeverx/dlex"}
     ]
