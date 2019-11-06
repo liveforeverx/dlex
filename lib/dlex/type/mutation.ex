@@ -27,12 +27,13 @@ defmodule Dlex.Type.Mutation do
     mutation_key = mutation_key(mutation_type, sub_type)
 
     mut = Mutation.new([{mutation_key, statement}, {:commit_now, commit}])
-    Request.new([
+
+    Request.new(
       commit_now: commit,
       start_ts: start_ts,
       mutations: [mut],
       query: query
-    ])
+    )
   end
 
   defp transaction_opts(%{start_ts: start_ts}), do: {false, start_ts}

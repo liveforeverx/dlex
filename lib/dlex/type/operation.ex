@@ -57,16 +57,17 @@ defmodule Dlex.Type.Operation do
 
   def encode_types([]), do: ""
 
-  def encode_types(types) do 
-    types |>
-      List.wrap() |>
-      Enum.map_join("\n", &transform_type/1)
+  def encode_types(types) do
+    types
+    |> List.wrap()
+    |> Enum.map_join("\n", &transform_type/1)
   end
 
   defp transform_type(%{"name" => name, "fields" => fields}) do
-    fields_str = Enum.map_join(fields, "\n", fn(field) -> 
-      "#{field["name"]}: #{field["type"]}"
-    end)
+    fields_str =
+      Enum.map_join(fields, "\n", fn field ->
+        "#{field["name"]}: #{field["type"]}"
+      end)
 
     """
       type #{name}{

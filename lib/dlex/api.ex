@@ -230,7 +230,7 @@ defmodule Api.Value do
         }
   defstruct [:val]
 
-  oneof :val, 0
+  oneof(:val, 0)
   field :default_val, 1, type: :string, oneof: 0
   field :bytes_val, 2, type: :bytes, oneof: 0
   field :int_val, 3, type: :int64, oneof: 0
@@ -309,11 +309,11 @@ defmodule Api.Dgraph.Service do
   @moduledoc false
   use GRPC.Service, name: "api.Dgraph"
 
-  rpc :Login, Api.LoginRequest, Api.Response
-  rpc :Query, Api.Request, Api.Response
-  rpc :Alter, Api.Operation, Api.Payload
-  rpc :CommitOrAbort, Api.TxnContext, Api.TxnContext
-  rpc :CheckVersion, Api.Check, Api.Version
+  rpc(:Login, Api.LoginRequest, Api.Response)
+  rpc(:Query, Api.Request, Api.Response)
+  rpc(:Alter, Api.Operation, Api.Payload)
+  rpc(:CommitOrAbort, Api.TxnContext, Api.TxnContext)
+  rpc(:CheckVersion, Api.Check, Api.Version)
 end
 
 defmodule Api.Dgraph.Stub do

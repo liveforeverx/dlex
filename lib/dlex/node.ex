@@ -113,7 +113,7 @@ defmodule Dlex.Node do
       defstruct [:uid | @fields_struct]
 
       fields = Enum.reverse(@fields)
-      source = if @name, do: "type.#{@name}"
+      source = @name
       alter = Dlex.Node.__schema_alter___(__MODULE__, source)
 
       def __schema__(:source), do: unquote(source)
@@ -139,20 +139,22 @@ defmodule Dlex.Node do
 
   @doc false
   def __schema_alter___(module, source) do
-    preds = module
+    preds =
+      module
       |> Module.get_attribute(:fields_data)
       |> Enum.flat_map(&List.wrap(&1.alter))
       |> Enum.reverse()
 
-    type_fields = module
-                  |> Module.get_attribute(:fields_data)
-                  |> Enum.map(fn(fdata) -> 
-                    %{
-                      "name" => fdata.db_name, 
-                      "type" => Atom.to_string(fdata.type)
-                    }
-                  end)
-    
+    type_fields =
+      module
+      |> Module.get_attribute(:fields_data)
+      |> Enum.map(fn fdata ->
+        %{
+          "name" => fdata.db_name,
+          "type" => Atom.to_string(fdata.type)
+        }
+      end)
+
     type = %{"name" => source, "fields" => type_fields}
 
     %{

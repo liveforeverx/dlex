@@ -1,3 +1,7 @@
+# 0.3.2
+
+* Rename dgraph.type to be without prefix `type.` as it do not needed anymore
+
 # 0.3.1
 
 * Add http support for DGraph `1.1.0`
