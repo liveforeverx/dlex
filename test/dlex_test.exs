@@ -93,10 +93,7 @@ defmodule DlexTest do
              {:error,
               %Dlex.Error{
                 action: :commit,
-                reason: %GRPC.RPCError{
-                  message: "Transaction has been aborted. Please retry",
-                  status: 10
-                }
+                reason: %{message: "Transaction has been aborted. Please retry"}
               }}
            ] = results
 

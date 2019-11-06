@@ -1,11 +1,11 @@
-if Code.ensure_loaded?(Mint) do
+if Code.ensure_loaded?(Mint.HTTP) do
   defmodule Dlex.Adapters.HTTP do
     use Dlex.Adapter
 
     require Logger
 
     defmodule Request do
-      defstruct [:action, :start_ts, :json, :headers, :body]
+      defstruct [:action, :start_ts, :commit_now, :json, :headers, :body]
     end
 
     defmodule Response do
@@ -51,19 +51,25 @@ if Code.ensure_loaded?(Mint) do
     end
 
     @impl true
-    def mutate(channel, %{start_ts: start_ts} = request, json_lib, opts) do
-      {type, request_body} = find_mutation(request)
+    def mutate(channel, request, json_lib, opts) do
+      %{mutations: [mutation], start_ts: start_ts, query: query} = request
+      {type, mutation} = find_mutation(mutation)
 
       request = %Request{
         action: :mutate,
         start_ts: start_ts,
+        commit_now: request.commit_now,
         json: json_lib,
-        headers: commit_headers(request) ++ mutation_headers(type) ++ content_type(type),
-        body: request_body
+        headers: content_type(type),
+        body: build_mutation(mutation, query)
       }
 
       handle_request(channel, request, opts)
     end
+
+    defp build_mutation(mutation, query) when query in [nil, ""], do: mutation
+
+    defp build_mutation(mutation, query), do: ~s|upsert { query #{query} mutation #{mutation} }|
 
     defp find_mutation(%{set_json: json}) when json != "", do: {:json, ~s|{"set": #{json}}|}
     defp find_mutation(%{delete_json: json}) when json != "", do: {:json, ~s|{"delete": #{json}}|}
@@ -74,28 +80,18 @@ if Code.ensure_loaded?(Mint) do
     defp find_mutation(%{del_nquads: nquads}) when nquads != "",
       do: {:nquads, "{ delete { #{nquads} } }"}
 
-    defp commit_headers(%{commit_now: true}), do: [{"X-Dgraph-CommitNow", "true"}]
-    defp commit_headers(_), do: []
-
-    defp mutation_headers(:json), do: [{"X-Dgraph-MutationType", "json"}]
-
-    defp mutation_headers(:nquads), do: []
-
     @impl true
     def query(channel, %{start_ts: start_ts, vars: vars, query: query}, json_lib, opts) do
       request = %Request{
         action: :query,
         start_ts: start_ts,
         json: json_lib,
-        headers: query_vars(vars, json_lib) ++ content_type(:json),
-        body: query
+        headers: content_type(:json),
+        body: json_lib.encode!(%{"variables" => vars, "query" => to_string(query)})
       }
 
       handle_request(channel, request, opts)
     end
-
-    defp query_vars(nil, _json_lib), do: []
-    defp query_vars(vars, json_lib), do: [{"X-Dgraph-Vars", json_lib.encode!(vars)}]
 
     @impl true
     def commit_or_abort(channel, %{start_ts: start_ts, keys: keys}, json_lib, opts) do
@@ -115,10 +111,17 @@ if Code.ensure_loaded?(Mint) do
     defp content_type(:json), do: [{"Content-Type", "application/json"}]
     defp content_type(:nquads), do: [{"Content-Type", "application/rdf"}]
 
-    defp handle_request(channel, %Request{action: action, start_ts: start_ts} = request, opts) do
-      %Request{json: json_lib, headers: headers, body: request_body} = request
+    defp handle_request(channel, request, opts) do
+      %Request{
+        action: action,
+        start_ts: start_ts,
+        commit_now: commit_now,
+        json: json_lib,
+        headers: headers,
+        body: request_body
+      } = request
 
-      path = build_path(action, start_ts)
+      path = build_path(action, start_ts, commit_now)
 
       case post(channel, path, headers, request_body, opts[:timeout]) do
         {:ok, %{status: 200, body: response_body}, channel} ->
@@ -132,9 +135,14 @@ if Code.ensure_loaded?(Mint) do
       end
     end
 
-    defp build_path(action, start_ts) do
+    defp build_path(action, start_ts, commit_now) do
       path = path(action)
-      if start_ts > 0, do: "#{path}/#{start_ts}", else: path
+
+      opts = [{"startTs", start_ts, start_ts > 0}, {"commitNow", "true", commit_now}]
+      opts = for {key, value, true} <- opts, do: "#{key}=#{value}"
+      opts_string = Enum.join(opts, "&")
+
+      if opts_string != "", do: "#{path}?#{opts_string}", else: path
     end
 
     defp path(:alter), do: "/alter"
@@ -159,7 +167,7 @@ if Code.ensure_loaded?(Mint) do
     end
 
     defp parse_success(:mutate, %{"data" => %{"uids" => uids}} = response) do
-      Dlex.Api.Assigned.new(uids: uids, context: parse_txn(response))
+      Dlex.Api.Response.new(txn: parse_txn(response), uids: uids)
     end
 
     defp parse_success(:query, %{"data" => data} = response) do
