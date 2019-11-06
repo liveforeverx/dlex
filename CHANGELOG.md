@@ -1,3 +1,7 @@
+# 0.3.1
+
+* Add http support for DGraph `1.1.0`
+
 # 0.3.0
 
 As dgraph has breaking API change, this version supports DGraph only in version `1.1.0`, use
