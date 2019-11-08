@@ -19,21 +19,28 @@ defmodule Dlex.Type.Mutation do
 
   @impl true
   def encode(%{json: json} = query, _parameters, _opts) do
-    %Query{sub_type: sub_type, statement: statement, condition: query, txn_context: txn} = query
+    %Query{sub_type: sub_type, statement: statement, condition: condition, query: query, txn_context: txn} = query
 
     {commit, start_ts} = transaction_opts(txn)
     mutation_type = infer_type(statement)
     statement = format(mutation_type, statement, json)
     mutation_key = mutation_key(mutation_type, sub_type)
 
-    mut = Mutation.new([{mutation_key, statement}, {:commit_now, commit}])
+    mutation_opts = [{mutation_key, statement}, {:commit_now, commit}]
 
-    Request.new(
+    mutation_opts = if is_binary(condition) do
+      mutation_opts ++ [{:cond, condition}]
+    else
+      mutation_opts
+    end
+
+    mut = Mutation.new(mutation_opts)
+    Request.new([
       commit_now: commit,
       start_ts: start_ts,
       mutations: [mut],
       query: query
-    )
+    ])
   end
 
   defp transaction_opts(%{start_ts: start_ts}), do: {false, start_ts}
@@ -47,6 +54,7 @@ defmodule Dlex.Type.Mutation do
   defp format(:json, statement, json_lib), do: json_lib.encode!(statement)
 
   defp mutation_key(:json, nil), do: :set_json
+  defp mutation_key(:cond, nil), do: :cond
   defp mutation_key(:nquads, nil), do: :set_nquads
   defp mutation_key(:json, :deletion), do: :delete_json
   defp mutation_key(:nquads, :deletion), do: :del_nquads

@@ -168,11 +168,11 @@ defmodule Dlex do
     * `:timeout` - Call timeout (default: `#{@timeout}`)
   """
 
-  @spec mutate(conn, iodata, iodata | map, Keyword.t()) ::
+  @spec mutate(conn, iodata, iodata, iodata | map, Keyword.t()) ::
           {:ok, map} | {:error, Dlex.Error.t() | term}
 
-  def mutate(conn, query, statement, opts) do
-    query = %Query{type: Type.Mutation, statement: statement, condition: query}
+  def mutate(conn, condition, query, statement, opts) do
+    query = %Query{type: Type.Mutation, condition: condition, statement: statement, query: query}
 
     with {:ok, _, result} <- DBConnection.prepare_execute(conn, query, %{}, opts),
          do: {:ok, result}
@@ -181,16 +181,28 @@ defmodule Dlex do
   @doc """
   The same as `Dlex.mutate(conn, "", mutation, [])`
   """
-  def mutate(conn, statement), do: mutate(conn, "", statement, [])
+  def mutate(conn, statement), do: mutate(conn, nil, "", statement, [])
 
   @doc """
   The same as `Dlex.mutate(conn, query, mutation, [])` or `Dlex.mutate(conn, "", mutation, opts)`
   """
   def mutate(conn, query, statement) when not is_list(statement),
-    do: mutate(conn, query, statement, [])
+    do: mutate(conn, nil, query, statement, [])
 
   def mutate(conn, statement, opts) when is_list(opts),
-    do: mutate(conn, "", statement, opts)
+    do: mutate(conn, nil, "", statement, opts)
+
+  @doc """
+  Runs a mutation and returns the result or raises `Dlex.Error` if there was an error.
+  See `mutate/5`.
+  """
+  @spec mutate!(conn, iodata, iodata, iodata | map, Keyword.t()) :: map | no_return
+  def mutate!(conn, condition, query, statement, opts) do
+    case mutate(conn, condition, query, statement, opts) do
+      {:ok, result} -> result
+      {:error, err} -> raise err
+    end
+  end
 
   @doc """
   Runs a mutation and returns the result or raises `Dlex.Error` if there was an error.
@@ -198,7 +210,7 @@ defmodule Dlex do
   """
   @spec mutate!(conn, iodata, iodata | map, Keyword.t()) :: map | no_return
   def mutate!(conn, query, statement, opts) do
-    case mutate(conn, query, statement, opts) do
+    case mutate(conn, nil, query, statement, opts) do
       {:ok, result} -> result
       {:error, err} -> raise err
     end
@@ -220,7 +232,7 @@ defmodule Dlex do
   See `mutate/2`.
   """
   def mutate!(conn, statement) do
-    case mutate(conn, nil, statement, []) do
+    case mutate(conn, statement, []) do
       {:ok, result} -> result
       {:error, err} -> raise err
     end
@@ -264,12 +276,12 @@ defmodule Dlex do
 
   """
   @spec delete(conn, iodata | map, Keyword.t()) :: {:ok, map} | {:error, Dlex.Error.t() | term}
-  def delete(conn, condition, statement, opts) do
+  def delete(conn, query, statement, opts) do
     query = %Query{
       type: Type.Mutation,
       sub_type: :deletion,
       statement: statement,
-      condition: condition
+      query: query
     }
 
     with {:ok, _, result} <- DBConnection.prepare_execute(conn, query, %{}, opts),
