@@ -130,7 +130,49 @@ defmodule DlexTest do
     assert String.contains?(error.reason.message, "Empty Argument")
   end
 
-  test "upsert", %{pid: pid} do
+  describe "upsert" do
+    setup [:upsert_schema]
+
+    test "basic", %{pid: pid} do
+      Dlex.mutate!(pid, %{
+        "name" => "upsert_test",
+        "email" => "foo@bar",
+        "dgraph.type" => "Client"
+      })
+
+      query = ~s|{ v as var(func: eq(email, "foo@bar")) }|
+
+      Dlex.mutate!(pid, %{query: query}, ~s|uid(v) <email> "foo@bar_changed" .|, return_json: true)
+
+      assert %{"email" => "foo@bar_changed"} = get_by_name(pid, "upsert_test")
+
+      query = ~s|{ v as var(func: eq(email, "foo@bar_changed")) }|
+      mutation_json = %{"uid" => "uid(v)", "email" => "foo@bar_changed2"}
+      Dlex.mutate!(pid, %{query: query}, mutation_json, return_json: true)
+      assert %{"email" => "foo@bar_changed2"} = get_by_name(pid, "upsert_test")
+    end
+
+    test "conditions", %{pid: pid} do
+      Dlex.mutate!(pid, %{
+        "name" => "upsert_test_2",
+        "email" => "foo@baz",
+        "dgraph.type" => "Client"
+      })
+
+      query = ~s|{ v as var(func: eq(email, "foo@baz")) }|
+      mutation_json = %{"uid" => "uid(v)", "email" => "foo@baz_changed"}
+
+      condition = ~s|@if(eq(len(v), 2))|
+      Dlex.mutate!(pid, %{query: query, condition: condition}, mutation_json, return_json: true)
+      assert %{"email" => "foo@baz"} = get_by_name(pid, "upsert_test_2")
+
+      condition = ~s|@if(eq(len(v), 1))|
+      Dlex.mutate!(pid, %{query: query, condition: condition}, mutation_json, return_json: true)
+      assert %{"email" => "foo@baz_changed"} = get_by_name(pid, "upsert_test_2")
+    end
+  end
+
+  defp upsert_schema(%{pid: pid} = context) do
     predicate = %{
       "upsert" => true,
       "index" => true,
@@ -140,16 +182,7 @@ defmodule DlexTest do
     }
 
     Dlex.alter!(pid, [predicate])
-    Dlex.mutate!(pid, %{"name" => "upsert_test", "email" => "foo@bar", "dgraph.type" => "Client"})
-
-    query = ~s|{ v as var(func: eq(email, "foo@bar")) }|
-    Dlex.mutate!(pid, query, ~s|uid(v) <email> "foo@bar_changed" .|, return_json: true)
-    assert %{"email" => "foo@bar_changed"} = get_by_name(pid, "upsert_test")
-
-    query = ~s|{ v as var(func: eq(email, "foo@bar_changed")) }|
-    mutation_json = %{"uid" => "uid(v)", "email" => "foo@bar_changed2"}
-    Dlex.mutate!(pid, query, mutation_json, return_json: true)
-    assert %{"email" => "foo@bar_changed2"} = get_by_name(pid, "upsert_test")
+    context
   end
 
   def uid_get(conn, uid) do
