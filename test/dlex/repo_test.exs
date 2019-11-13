@@ -20,6 +20,13 @@ defmodule Dlex.RepoTest do
       assert {:ok, %User{uid: uid}} = TestRepo.set(user)
       assert uid != nil
       assert {:ok, %User{uid: ^uid, name: "Alice", age: 25}} = TestRepo.get(uid)
+      assert %User{uid: ^uid, name: "Alice", age: 25} = TestRepo.get!(uid)
+
+      assert {:ok, %{"uid_get" => [%User{uid: ^uid, name: "Alice", age: 25}]}} =
+               TestRepo.all("{uid_get(func: uid(#{uid})) {uid dgraph.type expand(_all_)}}")
+
+      assert {:ok, %{"uid_get" => [%{"uid" => _, "user.age" => 25, "user.name" => "Alice"}]}} =
+               TestRepo.all("{uid_get(func: uid(#{uid})) {uid expand(_all_)}}")
     end
   end
 end

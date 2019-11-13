@@ -3,11 +3,6 @@ defmodule Dlex.NodeTest do
 
   alias Dlex.User
 
-  setup_all do
-    {:ok, pid} = Dlex.start_link(pool_size: 4)
-    %{pid: pid}
-  end
-
   describe "schema generation" do
     test "basic" do
       assert "user" == User.__schema__(:source)
