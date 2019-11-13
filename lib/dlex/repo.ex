@@ -118,7 +118,7 @@ defmodule Dlex.Repo do
   def mutate(conn, data, opts) do
     data_with_ids = Utils.add_blank_ids(data, :uid)
 
-    with {:ok, ids_map} <- Dlex.mutate(conn, encode(data_with_ids), opts) do
+    with {:ok, ids_map} <- Dlex.mutate(conn, %{}, encode(data_with_ids), opts) do
       {:ok, Utils.replace_ids(data_with_ids, ids_map, :uid)}
     end
   end

@@ -187,11 +187,8 @@ defmodule Dlex do
   def mutate(conn, statement), do: mutate(conn, %{}, statement, [])
 
   @doc """
-  The same as `Dlex.mutate(conn, queries, mutation, [])` or `Dlex.mutate(conn, %{}, mutation, opts)`
+  The same as `Dlex.mutate(conn, queries, mutation, [])`.
   """
-  def mutate(conn, queries, statement) when not is_map(queries),
-    do: mutate(conn, queries, statement, [])
-
   def mutate(conn, statement, opts) when is_list(opts),
     do: mutate(conn, %{}, statement, opts)
 
@@ -211,9 +208,9 @@ defmodule Dlex do
   Runs a mutation and returns the result or raises `Dlex.Error` if there was an error.
   See `mutate/4`.
   """
-  @spec mutate!(conn, iodata | map, iodata | Keyword.t()) :: map | no_return
-  def mutate!(conn, query_or_statement, statement_or_opts) do
-    case mutate(conn, query_or_statement, statement_or_opts) do
+  @spec mutate!(conn, iodata | map, Keyword.t()) :: map | no_return
+  def mutate!(conn, statement, opts) do
+    case mutate(conn, statement, opts) do
       {:ok, result} -> result
       {:error, err} -> raise err
     end

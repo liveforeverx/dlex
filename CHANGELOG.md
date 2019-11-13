@@ -1,3 +1,14 @@
+# 0.4.0
+
+* Add support for conditions in upsert
+* Add support for returning structs in Repo.all
+
+Backwards-compatible changes:
+
+* `Dlex.mutate(pid, query, mutation, opts)` is now `Dlex.mutate(pid, %{query: query}, mutation, opts)`,
+  additionally `Dlex.mutate(pid, %{query: query, condition: condition}, mutation, opts)`
+* `Repo.all` defined via `Dlex.Repo` - could return structs(if type is defined) instead of pure jsons
+
 # 0.3.2
 
 * Rename dgraph.type to be without prefix `type.` as it do not needed anymore
