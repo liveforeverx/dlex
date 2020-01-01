@@ -52,8 +52,8 @@ if Code.ensure_loaded?(Mint.HTTP) do
 
     @impl true
     def mutate(channel, request, json_lib, opts) do
-      %{mutations: [mutation], start_ts: start_ts, query: query} = request
-      {type, mutation} = find_mutation(mutation)
+      %{mutations: [%{cond: condition} = mutation], start_ts: start_ts, query: query} = request
+      {type, _, _} = mutation_spec = find_mutation(mutation)
 
       request = %Request{
         action: :mutate,
@@ -61,24 +61,37 @@ if Code.ensure_loaded?(Mint.HTTP) do
         commit_now: request.commit_now,
         json: json_lib,
         headers: content_type(type),
-        body: build_mutation(mutation, query)
+        body: build_mutation(mutation_spec, json_lib, query, condition)
       }
 
       handle_request(channel, request, opts)
     end
 
-    defp build_mutation(mutation, query) when query in [nil, ""], do: mutation
+    defp build_mutation({type, operation, mutation}, _json_lib, query, _condition)
+         when query in [nil, ""] do
+      case type do
+        :nquads -> "{ #{operation} { #{mutation} } }"
+        :json -> ~s|{"#{operation}": #{mutation}}|
+      end
+    end
 
-    defp build_mutation(mutation, query), do: ~s|upsert { query #{query} mutation #{mutation} }|
+    defp build_mutation({:nquads, operation, mutation}, _json_lib, query, condition) do
+      ~s|upsert { query #{query} mutation #{condition} { #{operation} { #{mutation} } } }|
+    end
 
-    defp find_mutation(%{set_json: json}) when json != "", do: {:json, ~s|{"set": #{json}}|}
-    defp find_mutation(%{delete_json: json}) when json != "", do: {:json, ~s|{"delete": #{json}}|}
+    defp build_mutation({:json, operation, mutation}, json_lib, query, condition) do
+      condition_string =
+        with condition when is_binary(condition) and condition != "" <- condition do
+          ~s|, "cond": #{json_lib.encode!(condition)}|
+        end
 
-    defp find_mutation(%{set_nquads: nquads}) when nquads != "",
-      do: {:nquads, "{ set { #{nquads} } }"}
+      ~s|{"query": #{json_lib.encode!(query)}#{condition_string}, "#{operation}": #{mutation}}|
+    end
 
-    defp find_mutation(%{del_nquads: nquads}) when nquads != "",
-      do: {:nquads, "{ delete { #{nquads} } }"}
+    defp find_mutation(%{set_json: json}) when json != "", do: {:json, :set, json}
+    defp find_mutation(%{delete_json: json}) when json != "", do: {:json, :delete, json}
+    defp find_mutation(%{set_nquads: nquads}) when nquads != "", do: {:nquads, :set, nquads}
+    defp find_mutation(%{del_nquads: nquads}) when nquads != "", do: {:nquads, :delete, nquads}
 
     @impl true
     def query(channel, %{start_ts: start_ts, vars: vars, query: query}, json_lib, opts) do

@@ -29,6 +29,8 @@ defmodule Dlex.Protocol do
 
   defp get_adapter(:grpc), do: Dlex.Adapters.GRPC
   defp get_adapter(:http), do: Dlex.Adapters.HTTP
+  # Add possibility to specify custom adapter
+  defp get_adapter(custom_adapter), do: custom_adapter
 
   # Implement calls for DBConnection Protocol
 

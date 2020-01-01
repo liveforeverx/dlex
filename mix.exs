@@ -4,12 +4,17 @@ defmodule Dlex.MixProject do
   def project do
     [
       app: :dlex,
-      version: "0.4.0",
+      version: "0.4.1",
       elixir: "~> 1.7",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
       description: description(),
-      package: package()
+      package: package(),
+      aliases: [
+        "test.all": ["test.http", "test"],
+        "test.http": &test_http/1
+      ],
+      preferred_cli_env: ["test.all": :test, "test.http": :test]
     ]
   end
 
@@ -45,5 +50,22 @@ defmodule Dlex.MixProject do
       licenses: ["Apache 2.0"],
       links: %{"Github" => "https://github.com/liveforeverx/dlex"}
     ]
+  end
+
+  defp test_http(args) do
+    env_run([{"DLEX_ADAPTER", "http"}], args)
+  end
+
+  defp env_run(envs, args) do
+    args = if IO.ANSI.enabled?(), do: ["--color" | args], else: ["--no-color" | args]
+
+    env_line = envs |> Enum.map(fn {key, value} -> "#{key}=#{value}" end) |> Enum.join(" ")
+    IO.puts("==> Running tests with environments: #{env_line} mix test")
+
+    {_, res} = System.cmd("mix", ["test" | args], into: IO.binstream(:stdio, :line), env: envs)
+
+    if res > 0 do
+      System.at_exit(fn _ -> exit({:shutdown, 1}) end)
+    end
   end
 end

@@ -1,9 +1,14 @@
+# 0.4.1
+
+* check dgraph 1.1.1 is supported
+* fix upserts for http protocol
+
 # 0.4.0
 
 * Add support for conditions in upsert
 * Add support for returning structs in Repo.all
 
-Backwards-compatible changes:
+Backwards-incompatible changes:
 
 * `Dlex.mutate(pid, query, mutation, opts)` is now `Dlex.mutate(pid, %{query: query}, mutation, opts)`,
   additionally `Dlex.mutate(pid, %{query: query, condition: condition}, mutation, opts)`

@@ -60,6 +60,8 @@ defmodule Dlex.Repo do
       def alter_schema(snapshot \\ snapshot()), do: Dlex.Repo.alter_schema(@name, snapshot)
 
       def stop(timeout \\ 5000), do: Supervisor.stop(@name, :normal, timeout)
+
+      def drop_all(), do: Dlex.Repo.drop_all(@name)
     end
   end
 
@@ -274,5 +276,13 @@ defmodule Dlex.Repo do
       depends_on_modules = module.__schema__(:depends_on)
       Enum.reduce(depends_on_modules, modules, &if(Enum.member?(&2, &1), do: &2, else: [&1 | &2]))
     end)
+  end
+
+  @doc """
+  Drop everything from database. Use with caution, as it deletes everything, what you have
+  in database.
+  """
+  def drop_all(conn) do
+    Dlex.alter(conn, %{drop_all: true})
   end
 end

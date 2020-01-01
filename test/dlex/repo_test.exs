@@ -1,10 +1,10 @@
 defmodule Dlex.RepoTest do
   use ExUnit.Case
 
-  alias Dlex.{TestRepo, User}
+  alias Dlex.{TestHelper, TestRepo, User}
 
   setup_all do
-    {:ok, pid} = TestRepo.start_link(port: 9090)
+    {:ok, pid} = TestRepo.start_link(TestHelper.opts())
     %{pid: pid}
   end
 

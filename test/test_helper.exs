@@ -17,6 +17,15 @@ defmodule Dlex.TestRepo do
 end
 
 defmodule Dlex.TestHelper do
+  @dlex_adapter :"#{System.get_env("DLEX_ADAPTER", "grpc")}"
+
+  def opts() do
+    case @dlex_adapter do
+      :http -> [transport: :http, port: 8090]
+      :grpc -> [transport: :grpc, port: 9090]
+    end
+  end
+
   def drop_all(pid) do
     Dlex.alter(pid, %{drop_all: true})
   end

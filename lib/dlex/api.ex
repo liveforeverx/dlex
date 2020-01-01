@@ -1,5 +1,41 @@
 alias Dlex.Api
 
+defmodule Api.Operation.DropOp do
+  @moduledoc false
+  use Protobuf, enum: true, syntax: :proto3
+
+  field :NONE, 0
+  field :ALL, 1
+  field :DATA, 2
+  field :ATTR, 3
+  field :TYPE, 4
+end
+
+defmodule Api.Facet.ValType do
+  @moduledoc false
+  use Protobuf, enum: true, syntax: :proto3
+
+  field :STRING, 0
+  field :INT, 1
+  field :FLOAT, 2
+  field :BOOL, 3
+  field :DATETIME, 4
+end
+
+defmodule Api.Request.VarsEntry do
+  @moduledoc false
+  use Protobuf, map: true, syntax: :proto3
+
+  @type t :: %__MODULE__{
+          key: String.t(),
+          value: String.t()
+        }
+  defstruct [:key, :value]
+
+  field :key, 1, type: :string
+  field :value, 2, type: :string
+end
+
 defmodule Api.Request do
   @moduledoc false
   use Protobuf, syntax: :proto3
@@ -24,7 +60,7 @@ defmodule Api.Request do
   field :commit_now, 13, type: :bool
 end
 
-defmodule Api.Request.VarsEntry do
+defmodule Api.Response.UidsEntry do
   @moduledoc false
   use Protobuf, map: true, syntax: :proto3
 
@@ -54,20 +90,6 @@ defmodule Api.Response do
   field :txn, 2, type: Api.TxnContext
   field :latency, 3, type: Api.Latency
   field :uids, 12, repeated: true, type: Api.Response.UidsEntry, map: true
-end
-
-defmodule Api.Response.UidsEntry do
-  @moduledoc false
-  use Protobuf, map: true, syntax: :proto3
-
-  @type t :: %__MODULE__{
-          key: String.t(),
-          value: String.t()
-        }
-  defstruct [:key, :value]
-
-  field :key, 1, type: :string
-  field :value, 2, type: :string
 end
 
 defmodule Api.Mutation do
@@ -114,17 +136,6 @@ defmodule Api.Operation do
   field :drop_all, 3, type: :bool
   field :drop_op, 4, type: Api.Operation.DropOp, enum: true
   field :drop_value, 5, type: :string
-end
-
-defmodule Api.Operation.DropOp do
-  @moduledoc false
-  use Protobuf, enum: true, syntax: :proto3
-
-  field :NONE, 0
-  field :ALL, 1
-  field :DATA, 2
-  field :ATTR, 3
-  field :TYPE, 4
 end
 
 defmodule Api.Payload do
@@ -262,17 +273,6 @@ defmodule Api.Facet do
   field :val_type, 3, type: Api.Facet.ValType, enum: true
   field :tokens, 4, repeated: true, type: :string
   field :alias, 5, type: :string
-end
-
-defmodule Api.Facet.ValType do
-  @moduledoc false
-  use Protobuf, enum: true, syntax: :proto3
-
-  field :STRING, 0
-  field :INT, 1
-  field :FLOAT, 2
-  field :BOOL, 3
-  field :DATETIME, 4
 end
 
 defmodule Api.LoginRequest do
