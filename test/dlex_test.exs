@@ -8,19 +8,19 @@ defmodule DlexTest do
 
     schema = """
       type Client {
-        name: string
-        email: string
-        balance: float
+        name
+        email
+        balance
       }
 
       type CastMember {
-        name: string
-        surname: string
+        name
+        surname
       }
 
       type Film {
-        name: string
-        release_date: string
+        name
+        release_date
         starring: [CastMember]
       }
 
@@ -29,6 +29,7 @@ defmodule DlexTest do
       email: string @index(term, hash) .
       name: string @index(term) .
       surname: string @index(term) .
+      balance: float .
     """
 
     Dlex.alter!(pid, schema)
