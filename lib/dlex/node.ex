@@ -42,6 +42,8 @@ defmodule Dlex.Node do
       * `:geo`
       * `:datetime`
       * `:uid`
+      * `:boolean`
+      * `:password`
       * `:auto` - special type, which can be used for `depends_on`
 
   ## Reflection
@@ -237,7 +239,9 @@ defmodule Dlex.Node do
     string: "string",
     geo: "geo",
     datetime: "datetime",
-    uid: "uid"
+    uid: "uid",
+    boolean: "bool",
+    password: "password"
   ]
 
   for {type, dgraph_type} <- @types_mapping do
