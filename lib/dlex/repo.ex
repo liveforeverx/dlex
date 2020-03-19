@@ -112,9 +112,9 @@ defmodule Dlex.Repo do
   @doc """
   Mutate data
   """
-  def mutate(conn, %{__struct__: Ecto.Changeset, changes: changes, data: %type{uid: uid}}, opts) do
-    data = struct(type, Map.put(changes, :uid, uid))
-    mutate(conn, data, opts)
+  def mutate(conn, %{__struct__: Ecto.Changeset, valid?: false} = struct, opts), do: {:error, struct}
+  def mutate(conn, %{__struct__: Ecto.Changeset, valid?: true, changes: changes}, opts) do
+    mutate(conn, changes, opts)
   end
 
   def mutate(conn, data, opts) do
