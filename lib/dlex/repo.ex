@@ -10,7 +10,7 @@ defmodule Dlex.Repo do
       hostname: "localhost",
       port: 3306
   """
-  alias Dlex.{Repo.Meta, Utils}
+  alias Dlex.{Repo.Meta, Utils, Error}
 
   @doc """
 
@@ -52,6 +52,8 @@ defmodule Dlex.Repo do
       def get(uid), do: Dlex.Repo.get(@name, meta(), uid)
       def get!(uid), do: Dlex.Repo.get!(@name, meta(), uid)
 
+      def one(query), do: Dlex.Repo.one(@name, query, meta())
+
       def all(query), do: Dlex.Repo.all(@name, query, meta())
 
       def meta(), do: Dlex.Repo.Meta.get(@meta_name)
@@ -81,6 +83,23 @@ defmodule Dlex.Repo do
           nil -> acc
           source -> Map.put(acc, source, module)
         end
+    end
+  end
+
+  @doc """
+  Query one. It automatically tries to decode values inside of a query. To make it work, you
+  need to expand the results it like this: `uid dgraph.type expand(_all_)`
+  """
+  def one(conn, query, %{lookup: lookup} = _meta \\ %{lookup: %{}}) do
+    with {:ok, data} <- Dlex.query(conn, query) do
+      case decode(data, lookup, false) do
+        {:ok, result} ->
+          if length(result.one) <= 1,
+            do: {:ok, List.first(result.one)},
+            else: {:error, Error.message(%{action: "Querying one", reason: "more than 1 result returned"})}
+
+        {:error, error} -> {:error, error}
+      end
     end
   end
 
@@ -196,7 +215,9 @@ defmodule Dlex.Repo do
             {:error, {:untyped, map}}
 
           true ->
-            for {key, values} <- map, into: %{}, do: {key, do_decode(values, lookup, strict?)}
+            for {key, values} <- map, into: %{} do
+              {String.to_atom(key), do_decode(values, lookup, strict?)}
+            end
         end
     end
   end
