@@ -1,3 +1,7 @@
+# 0.2.2
+
+* return global timeout configuration support
+
 # 0.2.1
 
 * add support for upcoming `upsert` functionallity (only for `grpc`)
