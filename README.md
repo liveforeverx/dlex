@@ -30,7 +30,7 @@ def deps do
   [
     {:jason, "~> 1.0"},
     {:castore, "~> 0.1.0", optional: true},
-    {:mint, github: "ericmj/mint", branch: "master"},
+    {:mint, "~> 1.0"},
     {:dlex, "~> 0.1.0"}
   ]
 end
