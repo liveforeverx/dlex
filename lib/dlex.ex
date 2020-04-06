@@ -58,7 +58,7 @@ defmodule Dlex do
   @spec start_link(Keyword.t()) :: {:ok, pid} | {:error, Dlex.Error.t() | term}
   def start_link(opts \\ []) do
     opts = default_opts(opts)
-    Application.put_env(:dlex, :timeout, Keyword.get(opts, :keyword), persistent: true)
+    Application.put_env(:dlex, :timeout, Keyword.get(opts, :timeout), persistent: true)
     DBConnection.start_link(Dlex.Protocol, opts)
   end
 
@@ -89,7 +89,7 @@ defmodule Dlex do
   @spec child_spec(Keyword.t()) :: Supervisor.Spec.spec()
   def child_spec(opts) do
     opts = default_opts(opts)
-    Application.put_env(:dlex, :timeout, Keyword.get(opts, :keyword), persistent: true)
+    Application.put_env(:dlex, :timeout, Keyword.get(opts, :timeout), persistent: true)
     DBConnection.child_spec(Dlex.Protocol, opts)
   end
 
