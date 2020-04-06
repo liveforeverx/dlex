@@ -1,3 +1,5 @@
+require Logger
+
 defmodule Dlex do
   @moduledoc """
   Dgraph driver for Elixir.
@@ -58,6 +60,7 @@ defmodule Dlex do
   @spec start_link(Keyword.t()) :: {:ok, pid} | {:error, Dlex.Error.t() | term}
   def start_link(opts \\ []) do
     opts = default_opts(opts)
+    Logger.debug("DBConnection opts #{inspect(opts)}")
     DBConnection.start_link(Dlex.Protocol, opts)
   end
 
@@ -87,6 +90,7 @@ defmodule Dlex do
   @spec child_spec(Keyword.t()) :: Supervisor.Spec.spec()
   def child_spec(opts) do
     opts = default_opts(opts)
+    Logger.debug("child_spec DBConnection opts #{inspect(opts)}")
     DBConnection.child_spec(Dlex.Protocol, opts)
   end
 
@@ -105,6 +109,7 @@ defmodule Dlex do
   @spec alter(conn, iodata | map, Keyword.t()) :: {:ok, map} | {:error, Dlex.Error.t() | term}
   def alter(conn, statement, opts \\ []) do
     query = %Query{type: Type.Operation, statement: statement}
+    Logger.debug("alter opts #{inspect(opts)}")
 
     with {:ok, _, result} <- DBConnection.prepare_execute(conn, query, %{}, opts),
          do: {:ok, result}
@@ -176,6 +181,7 @@ defmodule Dlex do
     condition = Map.get(queries, :condition)
     query = Map.get(queries, :query, "")
     query = %Query{type: Type.Mutation, condition: condition, statement: statement, query: query}
+    Logger.debug("mutate opts #{inspect(opts)}")
 
     with {:ok, _, result} <- DBConnection.prepare_execute(conn, query, %{}, opts),
          do: {:ok, result}
@@ -273,6 +279,8 @@ defmodule Dlex do
       query: query
     }
 
+    Logger.debug("delete opts #{inspect(opts)}")
+
     with {:ok, _, result} <- DBConnection.prepare_execute(conn, query, %{}, opts),
          do: {:ok, result}
   end
@@ -344,6 +352,7 @@ defmodule Dlex do
   @spec query(conn, iodata, map, Keyword.t()) :: {:ok, map} | {:error, Dlex.Error.t() | term}
   def query(conn, statement, parameters \\ %{}, opts \\ []) do
     query = %Query{type: Type.Query, statement: statement}
+    Logger.debug("query opts #{inspect(opts)}")
 
     with {:ok, _, result} <- DBConnection.prepare_execute(conn, query, parameters, opts),
          do: {:ok, result}
@@ -379,6 +388,8 @@ defmodule Dlex do
   @spec transaction(conn, (DBConnection.t() -> result :: any), Keyword.t()) ::
           {:ok, result :: any} | {:error, any}
   def transaction(conn, fun, opts \\ []) do
+    Logger.debug("transaction opts #{inspect(opts)}")
+
     try do
       DBConnection.transaction(conn, fun, opts)
     catch
