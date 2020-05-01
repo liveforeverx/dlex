@@ -109,7 +109,7 @@ defmodule DlexTest do
              )
 
     assert %{"uid" => ^uid} = get_by_name(pid, "deletion_test")
-    assert Dlex.delete!(pid, %{"uid" => uid}, return_json: true) |> IO.inspect(label: "Delete")
+    assert Dlex.delete!(pid, %{"uid" => uid}, return_json: true)
     assert %{"all" => []} = get_by_name(pid, "deletion_test")
   end
 

@@ -67,10 +67,14 @@ defmodule Dlex.Type.Mutation do
   defp mutation_key(:json, :deletion), do: :delete_json
   defp mutation_key(:nquads, :deletion), do: :del_nquads
 
+  defp parse_json(_json_lib, ""), do: %{}
+  defp parse_json(_json_lib, nil), do: %{}
+  defp parse_json(_json_lib, j) when is_map(j), do: j
+  defp parse_json(json_lib, j) when is_binary(j), do: json_lib.decode!(j)
+
   @impl true
   def decode(%Query{statement: statement, json: json_lib, type: Dlex.Type.Mutation} = _query, %Response{uids: uids, json: json} = _result, opts) do
-    queries = if json == "", do: %{}, else: json_lib.decode!(json)
-    result = %{uids: uids, queries: queries}
+    result = %{uids: uids, queries: parse_json(json_lib, json)}
     if opts[:return_json] do
       j = if is_binary(statement), do: %{}, else: Utils.replace_ids(statement, uids)
       Map.put(result, :json, j)
