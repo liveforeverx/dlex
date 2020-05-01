@@ -57,29 +57,27 @@ defmodule DlexTest do
   """
 
   test "mutation json", %{pid: pid} do
-    assert {:ok, uids} = Dlex.set(pid, @mutation_json)
+    assert {:ok, %{uids: uids}} = Dlex.set(pid, @mutation_json)
     assert 3 == map_size(uids)
 
-    assert %{
+    assert %{json: %{
              "name" => "Alice",
              "uid" => _uid1,
              "friends" => [
                %{"name" => "Betty", "uid" => _uid2},
                %{"name" => "Mark", "uid" => _uid3}
              ]
-           } = Dlex.mutate!(pid, @mutation_json, return_json: true)
+           }} = Dlex.mutate!(pid, @mutation_json, return_json: true)
   end
 
   test "mutation nquads", %{pid: pid} do
-    assert %{"luke" => uid_luke, "leia" => uid_leia, "sw1" => uid_sw1} =
-             Dlex.mutate!(pid, @mutation_nquads)
-
+    assert %{uids: %{"luke" => uid_luke, "leia" => uid_leia, "sw1" => uid_sw1}} = Dlex.mutate!(pid, @mutation_nquads)
     assert %{"name" => "Luke Skywalker"} == uid_get(pid, uid_luke)
   end
 
   test "query with parameters", %{pid: pid} do
     json = %{"name" => "Foo", "surname" => "bar", "dgraph.type" => "CastMember"}
-    assert %{"uid" => uid} = Dlex.mutate!(pid, json, return_json: true)
+    assert %{json: %{"uid" => uid}} = Dlex.mutate!(pid, json, return_json: true)
     %{"uid" => ^uid, "name" => "Foo", "surname" => "bar"} = get_by_name(pid, "Foo")
   end
 
@@ -105,7 +103,7 @@ defmodule DlexTest do
   end
 
   test "deletion", %{pid: pid} do
-    assert %{"uid" => uid} =
+    assert %{json: %{"uid" => uid}} =
              Dlex.mutate!(pid, %{"name" => "deletion_test", "dgraph.type" => "CastMember"},
                return_json: true
              )
@@ -137,22 +135,43 @@ defmodule DlexTest do
     setup [:upsert_schema]
 
     test "basic", %{pid: pid} do
-      Dlex.mutate!(pid, %{
+
+      # insert new node
+      resp = Dlex.mutate!(pid, %{
         "name" => "upsert_test",
         "email" => "foo@bar",
         "dgraph.type" => "Client"
       })
 
-      query = ~s|{ v as var(func: eq(email, "foo@bar")) }|
+      # grab the uid to test the rest of the mutations with
+      new_uid = Map.values(resp.uids) |> Enum.at(0)
+      assert new_uid && new_uid !== ""
 
-      Dlex.mutate!(pid, %{query: query}, ~s|uid(v) <email> "foo@bar_changed" .|, return_json: true)
-
+      # assert existing node uid used, :json key is missing when return_json: false used
+      query = ~s|{ q(func: eq(email, "foo@bar")) { v as uid } }|
+      resp1 = Dlex.mutate!(pid, %{query: query}, ~s|uid(v) <email> "foo@bar_changed" .|, return_json: false)
       assert %{"email" => "foo@bar_changed"} = get_by_name(pid, "upsert_test")
+      assert !Map.has_key?(resp1, :json)
+      assert resp1.uids === %{}
+      assert resp1.queries === %{"q" => [%{"uid" => new_uid}]}
 
-      query = ~s|{ v as var(func: eq(email, "foo@bar_changed")) }|
-      mutation_json = %{"uid" => "uid(v)", "email" => "foo@bar_changed2"}
-      Dlex.mutate!(pid, %{query: query}, mutation_json, return_json: true)
+      # assert existing node uid used, :json === %{} when return_json: true and nquad mutation
+      query = ~s|{ q(func: eq(email, "foo@bar_changed")) { v as uid } }|
+      resp2 = Dlex.mutate!(pid, %{query: query}, ~s|uid(v) <email> "foo@bar_changed2" .|, return_json: true)
       assert %{"email" => "foo@bar_changed2"} = get_by_name(pid, "upsert_test")
+      assert resp2.json === %{}
+      assert resp2.uids === %{}
+      assert resp2.queries === %{"q" => [%{"uid" => new_uid}]}
+
+      # assert existing node used when email already exists, :json has data in it, :queries is empty when `var` used
+      query = ~s|{ v as var(func: eq(email, "foo@bar_changed2")) }|
+      mutation_json = %{"uid" => "uid(v)", "email" => "foo@bar_changed3"}
+      resp3 = Dlex.mutate!(pid, %{query: query}, mutation_json, return_json: true)
+      assert %{"email" => "foo@bar_changed3"} = get_by_name(pid, "upsert_test")
+      assert resp3.json === %{"uid" => "uid(v)", "email" => "foo@bar_changed3"}
+      assert resp3.uids === %{}
+      assert resp3.queries === %{}
+
     end
 
     test "conditions", %{pid: pid} do
