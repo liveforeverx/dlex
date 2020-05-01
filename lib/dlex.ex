@@ -148,21 +148,20 @@ defmodule Dlex do
             _:bar <name> "Bar" .
            "
       iex> Dlex.mutate(conn, mutation)
-      {:ok, %{"bar" => "0xfe04c", "foo" => "0xfe04b"}}
+      {:ok, %{uids: %{"bar" => "0xfe04c", "foo" => "0xfe04b"}, queries: %{}}}
 
   Using `json`
 
-      iex> json = %{"name" => "Foo",
-                    "owns" => [%{"name" => "Bar"}]}
+      iex> json = %{"name" => "Foo", "owns" => [%{"name" => "Bar"}]}
            Dlex.mutate(conn, json)
-      {:ok, %{"blank-0" => "0xfe04d", "blank-1" => "0xfe04e"}}
+      {:ok, %{uids: %{"blank-0" => "0xfe04d", "blank-1" => "0xfe04e"}, queries: %{}}}
       iex> Dlex.mutate(conn, json, return_json: true)
       {:ok,
-       %{
+       %{ json: %{
          "name" => "Foo",
          "owns" => [%{"name" => "Bar", "uid" => "0xfe050"}],
          "uid" => "0xfe04f"
-       }}
+       }}}
 
   ## Options
 
@@ -236,28 +235,17 @@ defmodule Dlex do
 
   Example of usage
 
-      iex> mutation = "
-           _:foo <name> "Foo" .
-           _:foo <owns> _:bar .
-            _:bar <name> "Bar" .
-           "
-      iex> Dlex.delete(conn, mutation)
-      {:ok, %{"bar" => "0xfe04c", "foo" => "0xfe04b"}}
+      iex> Dlex.delete(conn, %{"uid" => "0xfe04c"})
+      {:ok, %{queries: %{}, uids: %{}}}
 
   Using `json`
 
-      iex> json = %{"name" => "Foo",
-                    "owns" => [%{"name" => "Bar"}]}
+      iex> json = %{"uid" => "0xfe04c"}
            Dlex.delete(conn, json)
-      {:ok, %{"blank-0" => "0xfe04d", "blank-1" => "0xfe04e"}}
+      {:ok, %{queries: %{}, uids: %{}}}
 
       iex> Dlex.delete(conn, json, return_json: true)
-      {:ok,
-       %{
-         "name" => "Foo",
-         "owns" => [%{"name" => "Bar", "uid" => "0xfe050"}],
-         "uid" => "0xfe04f"
-       }}
+      {:ok, %{json: %{"uid" => "0xfe04c"}, queries: %{}, uids: %{}}}
 
   ## Options
 
