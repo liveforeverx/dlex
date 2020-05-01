@@ -179,8 +179,8 @@ if Code.ensure_loaded?(Mint.HTTP) do
       Dlex.Api.Payload.new(Data: data)
     end
 
-    defp parse_success(:mutate, %{"data" => %{"uids" => uids}} = response) do
-      Dlex.Api.Response.new(txn: parse_txn(response), uids: uids)
+    defp parse_success(:mutate, %{"data" => %{"uids" => uids, "queries" => queries}} = response) do
+      Dlex.Api.Response.new(txn: parse_txn(response), uids: uids, json: queries)
     end
 
     defp parse_success(:query, %{"data" => data} = response) do
