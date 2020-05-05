@@ -112,7 +112,7 @@ defmodule Dlex.Repo do
   @doc """
   Mutate data
   """
-  def mutate(conn, %{__struct__: Ecto.Changeset, valid?: false} = struct, opts), do: {:error, struct}
+  def mutate(_conn, %{__struct__: Ecto.Changeset, valid?: false} = struct, _opts), do: {:error, struct}
 
   def mutate(conn, %{__struct__: Ecto.Changeset, valid?: true, changes: changes}, opts) do
     mutate(conn, changes, opts)

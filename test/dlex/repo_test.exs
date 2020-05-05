@@ -27,6 +27,12 @@ defmodule Dlex.RepoTest do
 
       assert {:ok, %{"uid_get" => [%{"uid" => _, "user.age" => 25, "user.name" => "Alice"}]}} =
                TestRepo.all("{uid_get(func: uid(#{uid})) {uid expand(_all_)}}")
+
+      invalid_changeset = Ecto.Changeset.cast(%User{}, %{name: 20, age: "Bernard"}, [:name, :age])
+      assert {:error, %Ecto.Changeset{valid?: false}} = TestRepo.set(invalid_changeset)
+
+      valid_changeset = Ecto.Changeset.cast(%User{}, %{name: "Bernard", age: 20}, [:name, :age])
+      assert {:ok, %User{uid: uid}} = TestRepo.set(valid_changeset)
     end
   end
 end
