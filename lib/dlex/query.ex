@@ -1,29 +1,23 @@
 defmodule Dlex.Query do
   @moduledoc false
 
+  @type mutation :: %{
+          optional(:cond) => String.t(),
+          optional(:set) => map | iodata,
+          optional(:delete) => map | iodata
+        }
+
   @type t :: %__MODULE__{
           type: Dlex.Type.Alter | Dlex.Type.Mutation | Dlex.Type.Query,
-          sub_type: atom,
-          condition: String.t(),
           query: String.t(),
-          statement: map | String.t(),
+          statement: [mutation] | map | iodata,
           parameters: any,
           txn_context: Diex.Api.TxnContext.t(),
           json: atom,
           request: any
         }
 
-  defstruct [
-    :type,
-    :sub_type,
-    :condition,
-    :query,
-    :statement,
-    :parameters,
-    :json,
-    :request,
-    :txn_context
-  ]
+  defstruct [:type, :query, :parameters, :statement, :json, :request, :txn_context]
 
   @type request :: any
   @callback request(t) :: request

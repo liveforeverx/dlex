@@ -1,3 +1,22 @@
+# 0.5.0
+
+* enahnce `mutate` API to support multiple mutations and set and delete combined
+* do not sent invalid changeset data to DGraph
+* fix creation of geo locations with `return_json: true` option
+* add support for `best_effort` and `read_only` options for query
+
+Backwards-incompatible changes:
+
+* `Dlex.mutate` changed. Before: `Dlex.mutate(pid, %{query: query, condition: condition}, mutation, opts)`,
+  now this changed to `Dlex.mutate(pid, %{query: query}, %{cond: condition, set: mutation}, opts)`. It allows
+  now to combine `set` and `delete` in the same mutation and do multiple mutations in one:
+    `Dlex.mutate(pid, %{query: query}, %{cond: condition, set: set, delete: delete}, opts)`
+    `Dlex.mutate(pid, %{query: query}, [mutaion1, mutation2])`
+* `Dlex.set` now doesn't accept `condition` in a query, `Dlex.mutate` should be used instead.
+* `Dlex.mutate`, `Dlex.delete`, `Dlex.set` doesn't return uids or json directly, but adds it to a map:
+  `%{uids: uids, json: json}` and additionally it has has key `queries` to return queries, which additionally
+  were used for this mutation. This allows to get everything back, what DGraph returns.
+
 # 0.4.1
 
 * check dgraph 1.1.1 is supported

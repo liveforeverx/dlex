@@ -1,5 +1,12 @@
 defmodule Dlex.Utils do
   @doc """
+  Encode variables
+  """
+  def encode_vars(vars) do
+    for {key, value} <- vars, into: %{}, do: {key, to_string(value)}
+  end
+
+  @doc """
   Add temporary blank ids to json object
   """
   def add_blank_ids(statement, uid_key \\ "uid"),
@@ -16,8 +23,12 @@ defmodule Dlex.Utils do
   end
 
   defp add_blank_ids(map, counter, uid_key) when is_map(map) do
-    map = Map.update(map, uid_key, "_:#{counter}", &(&1 || "_:#{counter}"))
-    :maps.fold(&do_add_blank_ids(&1, &2, &3, uid_key), {%{}, counter + 1}, map)
+    if is_location?(map) do
+      {map, counter}
+    else
+      map = Map.update(map, uid_key, "_:#{counter}", &(&1 || "_:#{counter}"))
+      :maps.fold(&do_add_blank_ids(&1, &2, &3, uid_key), {%{}, counter + 1}, map)
+    end
   end
 
   defp add_blank_ids(value, counter, _uid_key), do: {value, counter}
@@ -25,6 +36,11 @@ defmodule Dlex.Utils do
   defp do_add_blank_ids(key, value, {map, counter}, uid_key) do
     {value, counter} = add_blank_ids(value, counter, uid_key)
     {Map.put(map, key, value), counter}
+  end
+
+  defp is_location?(map) do
+    map_size(map) == 2 and
+      (match?(%{type: _, coordinates: _}, map) or match?(%{"type" => _, "coordinates" => _}, map))
   end
 
   @doc """

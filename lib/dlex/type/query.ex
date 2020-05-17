@@ -1,7 +1,7 @@
 defmodule Dlex.Type.Query do
   @moduledoc false
 
-  alias Dlex.{Adapter, Query}
+  alias Dlex.{Adapter, Query, Utils}
   alias Dlex.Api.{Request, Response, TxnContext}
 
   @behaviour Dlex.Type
@@ -15,8 +15,13 @@ defmodule Dlex.Type.Query do
   def describe(query, _opts), do: query
 
   @impl true
-  def encode(%Query{statement: statement}, parameters, _) do
-    Request.new(query: statement, vars: parameters)
+  def encode(%Query{statement: statement}, vars, opts) do
+    Request.new(
+      query: statement,
+      vars: Utils.encode_vars(vars),
+      read_only: Keyword.get(opts, :read_only, false),
+      best_effort: Keyword.get(opts, :best_effort, false)
+    )
   end
 
   @impl true

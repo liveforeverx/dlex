@@ -10,7 +10,15 @@ defmodule Dlex do
 
   @type conn :: DBConnection.conn()
   @type uid :: String.t()
-  @type queries :: %{optional(:query | :condition) => String.t()}
+  @type query :: iodata
+  @type query_map :: %{:query => query, optional(:vars) => map}
+  @type statement :: iodata | map
+  @type mutation :: %{
+          optional(:cond) => iodata,
+          optional(:set) => statement(),
+          optional(:delete) => statement()
+        }
+  @type mutations :: [mutation]
 
   @timeout 15_000
   @default_keepalive :infinity
@@ -27,7 +35,6 @@ defmodule Dlex do
     * `:json_library` - Specifies json library to use (default: `Jason`)
     * `:transport` - Specify if grpc or http should be used (default: `grpc`)
     * `:connect_timeout` - Connection timeout in milliseconds (default: `#{@timeout}`);
-    * `:timeout` - Call timeout in milliseconds (default: `#{@timeout}`);
 
   ### SSL/TLS configuration (automaticly enabled, if required files provided)
 
@@ -122,16 +129,95 @@ defmodule Dlex do
   end
 
   @doc """
-  See `mutate/3` for documentation.
+  Send mutation to dgraph. Shortcut for `mutate(conn, query, %{set: statement}, opts)`
+
+  Options:
+
+    * `return_json` - if json with uids should be returned (default: `false`)
+
+  Example of usage
+
+      iex> mutation = "
+           _:foo <name> "Foo" .
+           _:foo <owns> _:bar .
+            _:bar <name> "Bar" .
+           "
+      iex> Dlex.set(conn, mutation)
+      {:ok, %{uids: %{"bar" => "0xfe04c", "foo" => "0xfe04b"}, queries: %{}}}
+
+  Using `json`
+
+      iex> json = %{"name" => "Foo", "owns" => [%{"name" => "Bar"}]}
+           Dlex.set(conn, json)
+      {:ok, %{uids: %{"blank-0" => "0xfe04d", "blank-1" => "0xfe04e"}, queries: %{}}}
+      iex> Dlex.set(conn, json, return_json: true)
+      {:ok,
+       %{json: %{
+         "name" => "Foo",
+         "owns" => [%{"name" => "Bar", "uid" => "0xfe050"}],
+         "uid" => "0xfe04f"
+       }}}
+
+  ## Options
+
+    * `:timeout` - Call timeout (default: `#{@timeout}`)
+
   """
-  @spec set(conn, iodata | map, Keyword.t()) :: {:ok, map} | {:error, Dlex.Error.t() | term}
-  def set(conn, statement, opts \\ []), do: mutate(conn, statement, opts)
+
+  @spec set(conn, query_map, statement, Keyword.t()) ::
+          {:ok, map} | {:error, Dlex.Error.t() | term}
+
+  def set(conn, query, statement, opts), do: mutate(conn, query, %{set: statement}, opts)
 
   @doc """
-  See `mutate!/3` for documentation.
+  The same as `Dlex.set(conn, "", statement, [])`
   """
-  @spec set!(conn, iodata | map, Keyword.t()) :: map
-  def set!(conn, statement, opts \\ []), do: mutate!(conn, statement, opts)
+  @spec set(conn, statement) :: {:ok, map} | {:error, Dlex.Error.t() | term}
+  def set(conn, statement), do: mutate(conn, %{}, %{set: statement}, [])
+
+  @doc """
+  The same as `Dlex.set(conn, "", statement, opts)`.
+  """
+  @spec set(conn, query_map | statement, statement | Keyword.t()) ::
+          {:ok, map} | {:error, Dlex.Error.t() | term}
+  def set(conn, %{query: _} = query, statement), do: mutate(conn, query, %{set: statement}, [])
+  def set(conn, statement, opts), do: mutate(conn, %{}, %{set: statement}, opts)
+
+  @doc """
+  Runs a mutation and returns the result or raises `Dlex.Error` if there was an error.
+  See `set/4`.
+  """
+  @spec set!(conn, query_map, statement, Keyword.t()) :: map | no_return
+  def set!(conn, query, statement, opts) do
+    case mutate(conn, query, %{set: statement}, opts) do
+      {:ok, result} -> result
+      {:error, err} -> raise err
+    end
+  end
+
+  @doc """
+  Runs a mutation and returns the result or raises `Dlex.Error` if there was an error.
+  See `set/3`.
+  """
+  @spec set!(conn, query_map | statement, statement | Keyword.t()) :: map | no_return
+  def set!(conn, statement, opts) do
+    case set(conn, statement, opts) do
+      {:ok, result} -> result
+      {:error, err} -> raise err
+    end
+  end
+
+  @doc """
+  Runs a mutation and returns the result or raises `Dlex.Error` if there was an error.
+  See `set/2`.
+  """
+  @spec mutate!(conn, statement) :: map | no_return
+  def set!(conn, statement) do
+    case mutate(conn, %{}, %{set: statement}, []) do
+      {:ok, result} -> result
+      {:error, err} -> raise err
+    end
+  end
 
   @doc """
   Send mutation to dgraph
@@ -147,17 +233,17 @@ defmodule Dlex do
            _:foo <owns> _:bar .
             _:bar <name> "Bar" .
            "
-      iex> Dlex.mutate(conn, mutation)
+      iex> Dlex.mutate(conn, %{set: mutation})
       {:ok, %{uids: %{"bar" => "0xfe04c", "foo" => "0xfe04b"}, queries: %{}}}
 
   Using `json`
 
       iex> json = %{"name" => "Foo", "owns" => [%{"name" => "Bar"}]}
-           Dlex.mutate(conn, json)
+           Dlex.mutate(conn, %{set: json})
       {:ok, %{uids: %{"blank-0" => "0xfe04d", "blank-1" => "0xfe04e"}, queries: %{}}}
-      iex> Dlex.mutate(conn, json, return_json: true)
+      iex> Dlex.mutate(conn, %{set: json}, return_json: true)
       {:ok,
-       %{ json: %{
+       %{json: %{
          "name" => "Foo",
          "owns" => [%{"name" => "Bar", "uid" => "0xfe050"}],
          "uid" => "0xfe04f"
@@ -168,36 +254,39 @@ defmodule Dlex do
     * `:timeout` - Call timeout (default: `#{@timeout}`)
   """
 
-  @spec mutate(conn, queries, iodata | map, Keyword.t()) ::
+  @spec mutate(conn, query_map, mutations, Keyword.t()) ::
           {:ok, map} | {:error, Dlex.Error.t() | term}
 
-  def mutate(conn, queries, statement, opts) do
-    condition = Map.get(queries, :condition)
-    query = Map.get(queries, :query, "")
-    query = %Query{type: Type.Mutation, condition: condition, statement: statement, query: query}
+  def mutate(conn, query_map, mutations, opts) do
+    query_statement = Map.get(query_map, :query, "")
+    query_vars = Map.get(query_map, :vars, %{})
+    query = %Query{type: Type.Mutation, statement: List.wrap(mutations), query: query_statement}
 
-    with {:ok, _, result} <- DBConnection.prepare_execute(conn, query, %{}, opts),
+    with {:ok, _, result} <- DBConnection.prepare_execute(conn, query, query_vars, opts),
          do: {:ok, result}
   end
 
   @doc """
-  The same as `Dlex.mutate(conn, "", mutation, [])`
+  The same as `Dlex.mutate(conn, "", mutations, [])`
   """
-  def mutate(conn, statement), do: mutate(conn, %{}, statement, [])
+  @spec mutate(conn, mutations) :: {:ok, map} | {:error, Dlex.Error.t() | term}
+  def mutate(conn, mutations), do: mutate(conn, %{}, mutations, [])
 
   @doc """
-  The same as `Dlex.mutate(conn, queries, mutation, [])`.
+  The same as `Dlex.mutate(conn, "", mutations, opts)`.
   """
-  def mutate(conn, statement, opts) when is_list(opts),
-    do: mutate(conn, %{}, statement, opts)
+  @spec mutate(conn, query_map | mutations, mutations | Keyword.t()) ::
+          {:ok, map} | {:error, Dlex.Error.t() | term}
+  def mutate(conn, %{query: _} = query, mutations), do: mutate(conn, query, mutations, [])
+  def mutate(conn, mutations, opts), do: mutate(conn, %{}, mutations, opts)
 
   @doc """
   Runs a mutation and returns the result or raises `Dlex.Error` if there was an error.
   See `mutate/5`.
   """
-  @spec mutate!(conn, queries, iodata, Keyword.t()) :: map | no_return
-  def mutate!(conn, queries, statement, opts) do
-    case mutate(conn, queries, statement, opts) do
+  @spec mutate!(conn, query, mutations, Keyword.t()) :: map | no_return
+  def mutate!(conn, query, mutations, opts) do
+    case mutate(conn, query, mutations, opts) do
       {:ok, result} -> result
       {:error, err} -> raise err
     end
@@ -207,9 +296,9 @@ defmodule Dlex do
   Runs a mutation and returns the result or raises `Dlex.Error` if there was an error.
   See `mutate/4`.
   """
-  @spec mutate!(conn, iodata | map, Keyword.t()) :: map | no_return
-  def mutate!(conn, statement, opts) do
-    case mutate(conn, statement, opts) do
+  @spec mutate!(conn, query | mutations, mutations | Keyword.t()) :: map | no_return
+  def mutate!(conn, mutations, opts) do
+    case mutate(conn, mutations, opts) do
       {:ok, result} -> result
       {:error, err} -> raise err
     end
@@ -219,8 +308,9 @@ defmodule Dlex do
   Runs a mutation and returns the result or raises `Dlex.Error` if there was an error.
   See `mutate/2`.
   """
-  def mutate!(conn, statement) do
-    case mutate(conn, %{}, statement, []) do
+  @spec mutate!(conn, mutations) :: map | no_return
+  def mutate!(conn, mutations) do
+    case mutate(conn, %{}, mutations, []) do
       {:ok, result} -> result
       {:error, err} -> raise err
     end
@@ -252,40 +342,33 @@ defmodule Dlex do
     * `:timeout` - Call timeout (default: `#{@timeout}`)
 
   """
-  @spec delete(conn, iodata | map, Keyword.t()) :: {:ok, map} | {:error, Dlex.Error.t() | term}
-  def delete(conn, query, statement, opts) do
-    query = %Query{
-      type: Type.Mutation,
-      sub_type: :deletion,
-      statement: statement,
-      query: query
-    }
-
-    with {:ok, _, result} <- DBConnection.prepare_execute(conn, query, %{}, opts),
-         do: {:ok, result}
-  end
+  @spec delete(conn, query, statement, Keyword.t()) ::
+          {:ok, map} | {:error, Dlex.Error.t() | term}
+  def delete(conn, query, statement, opts), do: mutate(conn, query, %{delete: statement}, opts)
 
   @doc """
   The same as `Dlex.delete(conn, "", deletion, [])`
   """
-  def delete(conn, statement), do: delete(conn, "", statement, [])
+  @spec delete(conn, statement) :: {:ok, map} | {:error, Dlex.Error.t() | term}
+  def delete(conn, statement), do: mutate(conn, %{}, %{delete: statement}, [])
 
   @doc """
   The same as `Dlex.delete(conn, query, deletion, [])` or `Dlex.delete(conn, "", deletion, opts)`
   """
-  def delete(conn, query, statement) when not is_list(statement),
-    do: delete(conn, query, statement, [])
+  @spec delete(conn, query | statement, statement | Keyword.t()) ::
+          {:ok, map} | {:error, Dlex.Error.t() | term}
+  def delete(conn, %{query: _} = query, statement),
+    do: mutate(conn, query, %{delete: statement}, [])
 
-  def delete(conn, statement, opts) when is_list(opts),
-    do: delete(conn, "", statement, opts)
+  def delete(conn, statement, opts), do: mutate(conn, %{}, %{delete: statement}, opts)
 
   @doc """
   Runs a mutation with delete target and returns the result or raises `Dlex.Error` if there was
   an error. See `delete/4`.
   """
-  @spec delete!(conn, iodata, iodata | map, Keyword.t()) :: map | no_return
+  @spec delete!(conn, query, statement, Keyword.t()) :: map | no_return
   def delete!(conn, query, statement, opts) do
-    case delete(conn, query, statement, opts) do
+    case mutate(conn, query, %{delete: statement}, opts) do
       {:ok, result} -> result
       {:error, err} -> raise err
     end
@@ -295,6 +378,7 @@ defmodule Dlex do
   Runs a mutation with delete target and returns the result or raises `Dlex.Error` if there was
   an error. See `delete/3`.
   """
+  @spec delete(conn, query | statement, statement | Keyword.t()) :: map | no_return
   def delete!(conn, query_or_statement, statement_or_opts) do
     case delete(conn, query_or_statement, statement_or_opts) do
       {:ok, result} -> result
@@ -306,8 +390,9 @@ defmodule Dlex do
   Runs a mutation with delete target and returns the result or raises `Dlex.Error` if there was
   an error. See `delete/2`.
   """
+  @spec delete(conn, statement) :: map | no_return
   def delete!(conn, statement) do
-    case delete(conn, nil, statement, []) do
+    case mutate(conn, %{}, %{delete: statement}, []) do
       {:ok, result} -> result
       {:error, err} -> raise err
     end
@@ -328,6 +413,11 @@ defmodule Dlex do
            "
       iex> Dlex.query(conn, query, %{"$a" => "Foo"})
       {:ok, %{"foo" => [%{"name" => "Foo", "uid" => "0xfe04d"}]}}
+
+  Query options (see DGraph documentation for more information):
+
+      * `best_effort` - `boolean`
+      * `read_only` - `boolean`
   """
   @spec query(conn, iodata, map, Keyword.t()) :: {:ok, map} | {:error, Dlex.Error.t() | term}
   def query(conn, statement, parameters \\ %{}, opts \\ []) do

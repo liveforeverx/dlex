@@ -9,6 +9,13 @@ defmodule DlexTest do
     Dlex.alter!(pid, %{drop_all: true})
 
     schema = """
+      type User {
+        name
+        email
+        indexed_id
+        location
+      }
+
       type Client {
         name
         email
@@ -32,6 +39,8 @@ defmodule DlexTest do
       name: string @index(term) .
       surname: string @index(term) .
       balance: float .
+      indexed_id: int @index(int) .
+      location: geo @index(geo) .
     """
 
     Dlex.alter!(pid, schema)
@@ -60,30 +69,53 @@ defmodule DlexTest do
     assert {:ok, %{uids: uids}} = Dlex.set(pid, @mutation_json)
     assert 3 == map_size(uids)
 
-    assert %{json: %{
-             "name" => "Alice",
-             "uid" => _uid1,
-             "friends" => [
-               %{"name" => "Betty", "uid" => _uid2},
-               %{"name" => "Mark", "uid" => _uid3}
-             ]
-           }} = Dlex.mutate!(pid, @mutation_json, return_json: true)
+    assert %{
+             json: %{
+               "name" => "Alice",
+               "uid" => _uid1,
+               "friends" => [
+                 %{"name" => "Betty", "uid" => _uid2},
+                 %{"name" => "Mark", "uid" => _uid3}
+               ]
+             }
+           } = Dlex.set!(pid, @mutation_json, return_json: true)
   end
 
   test "mutation nquads", %{pid: pid} do
-    assert %{uids: %{"luke" => uid_luke, "leia" => uid_leia, "sw1" => uid_sw1}} = Dlex.mutate!(pid, @mutation_nquads)
+    assert %{uids: %{"luke" => uid_luke, "leia" => uid_leia, "sw1" => uid_sw1}} =
+             Dlex.set!(pid, @mutation_nquads)
+
     assert %{"name" => "Luke Skywalker"} == uid_get(pid, uid_luke)
   end
 
   test "query with parameters", %{pid: pid} do
     json = %{"name" => "Foo", "surname" => "bar", "dgraph.type" => "CastMember"}
-    assert %{json: %{"uid" => uid}} = Dlex.mutate!(pid, json, return_json: true)
-    %{"uid" => ^uid, "name" => "Foo", "surname" => "bar"} = get_by_name(pid, "Foo")
+    assert %{json: %{"uid" => uid}} = Dlex.set!(pid, json, return_json: true)
+    assert %{"uid" => ^uid, "name" => "Foo", "surname" => "bar"} = get_by_name(pid, "Foo")
+  end
+
+  test "query qith different type of parameters", %{pid: pid} do
+    json = %{
+      "name" => "UserFoo",
+      "email" => "userfoo@foobar",
+      "indexed_id" => 99,
+      "location" => %{
+        "type" => "Point",
+        "coordinates" => [-122.5, 37.8]
+      },
+      "dgraph.type" => "User"
+    }
+
+    assert %{json: %{"uid" => uid}} = Dlex.set!(pid, json, return_json: true)
+
+    statement = "query all($id: int) {all(func: eq(indexed_id, $id)) {uid expand(_all_)}}"
+
+    assert %{"all" => [%{"name" => "UserFoo"}]} = Dlex.query!(pid, statement, %{"$id" => 99})
   end
 
   test "basic transaction test", %{pid: pid} do
-    Dlex.mutate!(pid, %{"dgraph.type" => "Client", "name" => "client1", "balance" => 1000})
-    Dlex.mutate!(pid, %{"dgraph.type" => "Client", "name" => "client2", "balance" => 1000})
+    Dlex.set!(pid, %{"dgraph.type" => "Client", "name" => "client1", "balance" => 1000})
+    Dlex.set!(pid, %{"dgraph.type" => "Client", "name" => "client2", "balance" => 1000})
 
     tasks = for i <- [1, 2], do: Task.async(fn -> move_balance(pid, i * 100) end)
     results = for task <- tasks, do: Task.await(task)
@@ -104,7 +136,7 @@ defmodule DlexTest do
 
   test "deletion", %{pid: pid} do
     assert %{json: %{"uid" => uid}} =
-             Dlex.mutate!(pid, %{"name" => "deletion_test", "dgraph.type" => "CastMember"},
+             Dlex.set!(pid, %{"name" => "deletion_test", "dgraph.type" => "CastMember"},
                return_json: true
              )
 
@@ -135,62 +167,174 @@ defmodule DlexTest do
     setup [:upsert_schema]
 
     test "basic", %{pid: pid} do
-
       # insert new node
-      resp = Dlex.mutate!(pid, %{
-        "name" => "upsert_test",
-        "email" => "foo@bar",
-        "dgraph.type" => "Client"
-      })
+      %{uids: uids} =
+        Dlex.mutate!(pid, %{
+          set: %{
+            "name" => "upsert_test",
+            "email" => "foo@bar",
+            "dgraph.type" => "Client"
+          }
+        })
 
       # grab the uid to test the rest of the mutations with
-      new_uid = Map.values(resp.uids) |> Enum.at(0)
+      assert [new_uid] = Map.values(uids)
       assert new_uid && new_uid !== ""
 
       # assert existing node uid used, :json key is missing when return_json: false used
-      query = ~s|{ q(func: eq(email, "foo@bar")) { v as uid } }|
-      resp1 = Dlex.mutate!(pid, %{query: query}, ~s|uid(v) <email> "foo@bar_changed" .|, return_json: false)
-      assert %{"email" => "foo@bar_changed"} = get_by_name(pid, "upsert_test")
-      assert !Map.has_key?(resp1, :json)
-      assert resp1.uids === %{}
-      assert resp1.queries === %{"q" => [%{"uid" => new_uid}]}
+      %{uids: uids, queries: %{"q" => [%{"uid" => ^new_uid}]}} =
+        resp1 =
+        Dlex.mutate!(
+          pid,
+          %{query: ~s|{ q(func: eq(email, "foo@bar")) { v as uid } }|},
+          %{set: ~s|uid(v) <email> "foo@bar_changed" .|},
+          return_json: false
+        )
 
+      assert uids === %{}
       # assert existing node uid used, :json === %{} when return_json: true and nquad mutation
-      query = ~s|{ q(func: eq(email, "foo@bar_changed")) { v as uid } }|
-      resp2 = Dlex.mutate!(pid, %{query: query}, ~s|uid(v) <email> "foo@bar_changed2" .|, return_json: true)
+      refute Map.has_key?(resp1, :json)
+
+      assert %{"email" => "foo@bar_changed"} = get_by_name(pid, "upsert_test")
+
+      query = %{query: ~s|{ q(func: eq(email, "foo@bar_changed")) { v as uid } }|}
+
+      assert %{json: json, uids: uids, queries: %{"q" => [%{"uid" => ^new_uid}]}} =
+               Dlex.set!(pid, query, ~s|uid(v) <email> "foo@bar_changed2" .|, return_json: true)
+
+      assert json === %{}
+      assert uids === %{}
+
       assert %{"email" => "foo@bar_changed2"} = get_by_name(pid, "upsert_test")
-      assert resp2.json === %{}
-      assert resp2.uids === %{}
-      assert resp2.queries === %{"q" => [%{"uid" => new_uid}]}
 
-      # assert existing node used when email already exists, :json has data in it, :queries is empty when `var` used
-      query = ~s|{ v as var(func: eq(email, "foo@bar_changed2")) }|
+      # assert existing node used when email already exists, :json has data in it, :query is empty when `var` used
+      query = %{query: ~s|{ v as var(func: eq(email, "foo@bar_changed2")) }|}
       mutation_json = %{"uid" => "uid(v)", "email" => "foo@bar_changed3"}
-      resp3 = Dlex.mutate!(pid, %{query: query}, mutation_json, return_json: true)
-      assert %{"email" => "foo@bar_changed3"} = get_by_name(pid, "upsert_test")
-      assert resp3.json === %{"uid" => "uid(v)", "email" => "foo@bar_changed3"}
-      assert resp3.uids === %{}
-      assert resp3.queries === %{}
 
+      assert %{
+               json: %{"uid" => "uid(v)", "email" => "foo@bar_changed3"},
+               uids: uids,
+               queries: queries
+             } = Dlex.mutate!(pid, query, %{set: mutation_json}, return_json: true)
+
+      assert uids === %{}
+      assert queries === %{}
+
+      assert %{"email" => "foo@bar_changed3"} = get_by_name(pid, "upsert_test")
     end
 
     test "conditions", %{pid: pid} do
       Dlex.mutate!(pid, %{
-        "name" => "upsert_test_2",
-        "email" => "foo@baz",
-        "dgraph.type" => "Client"
+        set: %{
+          "name" => "upsert_test_2",
+          "email" => "foo@baz",
+          "dgraph.type" => "Client"
+        }
       })
 
-      query = ~s|{ v as var(func: eq(email, "foo@baz")) }|
+      query = %{
+        query: ~s|{ v as var(func: eq(email, "foo@baz")) }|
+      }
+
       mutation_json = %{"uid" => "uid(v)", "email" => "foo@baz_changed"}
 
-      condition = ~s|@if(eq(len(v), 2))|
-      Dlex.mutate!(pid, %{query: query, condition: condition}, mutation_json, return_json: true)
+      mutation = %{cond: ~s|@if(eq(len(v), 2))|, set: mutation_json}
+      Dlex.mutate!(pid, query, mutation, return_json: true)
+
       assert %{"email" => "foo@baz"} = get_by_name(pid, "upsert_test_2")
 
-      condition = ~s|@if(eq(len(v), 1))|
-      Dlex.mutate!(pid, %{query: query, condition: condition}, mutation_json, return_json: true)
+      mutation = %{cond: ~s|@if(eq(len(v), 1))|, set: mutation_json}
+      Dlex.mutate!(pid, query, mutation, return_json: true)
+
       assert %{"email" => "foo@baz_changed"} = get_by_name(pid, "upsert_test_2")
+    end
+
+    @tag :grpc
+    test "with variables in query in mutation", %{pid: pid} do
+      Dlex.mutate!(pid, %{
+        set: %{
+          "name" => "upsert_test_3",
+          "email" => "foobar@upsert_test_3",
+          "dgraph.type" => "Client"
+        }
+      })
+
+      query = %{
+        query: ~s|query var($email: string) { v as var(func: eq(email, $email)) }|,
+        vars: %{"$email" => "foobar@upsert_test_3"}
+      }
+
+      mutation_json = %{"uid" => "uid(v)", "email" => "foobaz@upsert_test_3"}
+
+      mutation = %{cond: ~s|@if(eq(len(v), 2))|, set: mutation_json}
+      Dlex.mutate!(pid, query, mutation, return_json: true)
+
+      assert %{"email" => "foobar@upsert_test_3"} = get_by_name(pid, "upsert_test_3")
+
+      mutation = %{cond: ~s|@if(eq(len(v), 1))|, set: mutation_json}
+      Dlex.mutate!(pid, query, mutation, return_json: true)
+
+      assert %{"email" => "foobaz@upsert_test_3"} = get_by_name(pid, "upsert_test_3")
+    end
+
+    test "set and delete", %{pid: pid} do
+      Dlex.mutate!(pid, %{set: test_data("@set_delete")})
+
+      query = %{query: ~s|{ v as var(func: regexp(email, /.*@set_delete$/)) { a as age } }|}
+
+      Dlex.mutate!(pid, query, %{
+        delete: %{"uid" => "uid(v)", "age" => nil},
+        set: %{"uid" => "uid(v)", "new_age" => "val(a)"}
+      })
+
+      check_migrated(pid, "@set_delete")
+    end
+
+    test "multiple mutations", %{pid: pid} do
+      Dlex.mutate!(pid, %{set: test_data("@multiple_migrations")})
+
+      query = %{
+        query: ~s|{ v as var(func: regexp(email, /.*@multiple_migrations$/)) { a as age } }|
+      }
+
+      Dlex.mutate!(pid, query, [
+        %{delete: %{"uid" => "uid(v)", "age" => nil}},
+        %{set: %{"uid" => "uid(v)", "new_age" => "val(a)"}}
+      ])
+
+      check_migrated(pid, "@multiple_migrations")
+    end
+
+    test "multiple mutations with nquads", %{pid: pid} do
+      Dlex.mutate!(pid, %{set: test_data("@multiple_migrations_nquads")})
+
+      query = %{
+        query:
+          ~s|{ v as var(func: regexp(email, /.*@multiple_migrations_nquads$/)) { a as age } }|
+      }
+
+      Dlex.mutate!(pid, query, [
+        %{delete: "uid(v) <age> * ."},
+        %{set: "uid(v) <new_age> val(a) ."}
+      ])
+
+      check_migrated(pid, "@multiple_migrations_nquads")
+    end
+
+    defp test_data(prefix) do
+      [
+        %{"age" => 20, "email" => "foo#{prefix}", "dgraph.type" => "Client"},
+        %{"age" => 25, "email" => "bar#{prefix}", "dgraph.type" => "Client"}
+      ]
+    end
+
+    defp check_migrated(pid, prefix) do
+      query = "{all(func: regexp(email, /.*#{prefix}$/)) @filter(has(age)) {uid age}}"
+      assert %{"all" => []} = Dlex.query!(pid, query)
+
+      query = "{all(func: regexp(email, /.*#{prefix}$/)) @filter(has(new_age)) {uid new_age}}"
+
+      assert %{"all" => [_, _]} = Dlex.query!(pid, query)
     end
   end
 
@@ -199,7 +343,7 @@ defmodule DlexTest do
       "upsert" => true,
       "index" => true,
       "predicate" => "email",
-      "tokenizer" => ["exact"],
+      "tokenizer" => ["exact", "trigram"],
       "type" => "string"
     }
 
@@ -223,10 +367,10 @@ defmodule DlexTest do
       %{"uid" => uid2, "balance" => balance2} = get_by_name(conn, "client2")
 
       if sum == 100, do: :timer.sleep(50)
-      Dlex.mutate!(conn, %{"uid" => uid1, "balance" => balance1 - sum}, return_json: true)
+      Dlex.set!(conn, %{"uid" => uid1, "balance" => balance1 - sum}, return_json: true)
 
       if sum == 200, do: :timer.sleep(100)
-      Dlex.mutate!(conn, %{"uid" => uid2, "balance" => balance2 + sum}, return_json: true)
+      Dlex.set!(conn, %{"uid" => uid2, "balance" => balance2 + sum}, return_json: true)
     end)
   end
 end

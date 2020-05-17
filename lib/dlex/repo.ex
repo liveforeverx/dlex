@@ -112,7 +112,8 @@ defmodule Dlex.Repo do
   @doc """
   Mutate data
   """
-  def mutate(_conn, %{__struct__: Ecto.Changeset, valid?: false} = struct, _opts), do: {:error, struct}
+  def mutate(_conn, %{__struct__: Ecto.Changeset, valid?: false} = struct, _opts),
+    do: {:error, struct}
 
   def mutate(conn, %{__struct__: Ecto.Changeset, valid?: true, changes: changes}, opts) do
     mutate(conn, changes, opts)
@@ -121,7 +122,7 @@ defmodule Dlex.Repo do
   def mutate(conn, data, opts) do
     data_with_ids = Utils.add_blank_ids(data, :uid)
 
-    with {:ok, %{uids: ids_map}} <- Dlex.mutate(conn, %{}, encode(data_with_ids), opts) do
+    with {:ok, %{uids: ids_map}} <- Dlex.set(conn, %{}, encode(data_with_ids), opts) do
       {:ok, Utils.replace_ids(data_with_ids, ids_map, :uid)}
     end
   end

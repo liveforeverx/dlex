@@ -5,7 +5,16 @@ if Code.ensure_loaded?(Mint.HTTP) do
     require Logger
 
     defmodule Request do
-      defstruct [:action, :start_ts, :commit_now, :json, :headers, :body]
+      defstruct [
+        :action,
+        :read_only,
+        :best_effort,
+        :start_ts,
+        :commit_now,
+        :json,
+        :headers,
+        :body
+      ]
     end
 
     defmodule Response do
@@ -52,8 +61,10 @@ if Code.ensure_loaded?(Mint.HTTP) do
 
     @impl true
     def mutate(channel, request, json_lib, opts) do
-      %{mutations: [%{cond: condition} = mutation], start_ts: start_ts, query: query} = request
-      {type, _, _} = mutation_spec = find_mutation(mutation)
+      %{mutations: [mutation | _] = mutations, start_ts: start_ts, query: query, vars: variables} =
+        request
+
+      type = mutation_type(mutation)
 
       request = %Request{
         action: :mutate,
@@ -61,46 +72,104 @@ if Code.ensure_loaded?(Mint.HTTP) do
         commit_now: request.commit_now,
         json: json_lib,
         headers: content_type(type),
-        body: build_mutation(mutation_spec, json_lib, query, condition)
+        body: build_mutations(mutations, type, json_lib, query, variables)
       }
 
       handle_request(channel, request, opts)
     end
 
-    defp build_mutation({type, operation, mutation}, _json_lib, query, _condition)
-         when query in [nil, ""] do
-      case type do
-        :nquads -> "{ #{operation} { #{mutation} } }"
-        :json -> ~s|{"#{operation}": #{mutation}}|
-      end
+    defp build_mutations([mutation], :json, json_lib, query, variables) do
+      mutations_string = build_mutation(mutation, :json, json_lib)
+      ~s|{#{build_json_query(query, variables, json_lib)}#{mutations_string}}|
     end
 
-    defp build_mutation({:nquads, operation, mutation}, _json_lib, query, condition) do
-      ~s|upsert { query #{query} mutation #{condition} { #{operation} { #{mutation} } } }|
+    defp build_mutations(mutations, :json, json_lib, query, variables) do
+      mutations =
+        Enum.map_join(mutations, ", ", fn mutation ->
+          "{#{build_mutation(mutation, :json, json_lib)}}"
+        end)
+
+      ~s|{#{build_json_query(query, variables, json_lib)}"mutations": [#{mutations}]}|
     end
 
-    defp build_mutation({:json, operation, mutation}, json_lib, query, condition) do
-      condition_string =
-        with condition when is_binary(condition) and condition != "" <- condition do
-          ~s|, "cond": #{json_lib.encode!(condition)}|
+    defp build_mutations([mutation], :nquads, _json_lib, "", _) do
+      build_mutation(mutation, :nquads, false)
+    end
+
+    defp build_mutations(mutations, :nquads, _json_lib, query, variables)
+         when map_size(variables) == 0 do
+      mutations_string = Enum.map_join(mutations, " ", &build_mutation(&1, :nquads, true))
+      ~s|upsert { query #{query} #{mutations_string} }|
+    end
+
+    defp build_json_query("", _, _), do: ""
+
+    defp build_json_query(query, variables, json_lib),
+      do: ~s|"query": #{json_lib.encode!(query)}, "variables": #{json_lib.encode!(variables)}, |
+
+    defp build_mutation(mutation, :nquads, false) do
+      [{:nquads, operation, mutation}] = extract_mutations(mutation)
+      "{ #{operation} { #{mutation} } }"
+    end
+
+    defp build_mutation(%{cond: condition} = mutation, :nquads, true) do
+      mutations =
+        for {:nquads, operation, mutation} <- extract_mutations(mutation) do
+          "#{operation} { #{mutation} }"
         end
 
-      ~s|{"query": #{json_lib.encode!(query)}#{condition_string}, "#{operation}": #{mutation}}|
+      ~s|mutation #{condition} { #{Enum.join(mutations, " ")} }|
     end
 
-    defp find_mutation(%{set_json: json}) when json != "", do: {:json, :set, json}
-    defp find_mutation(%{delete_json: json}) when json != "", do: {:json, :delete, json}
-    defp find_mutation(%{set_nquads: nquads}) when nquads != "", do: {:nquads, :set, nquads}
-    defp find_mutation(%{del_nquads: nquads}) when nquads != "", do: {:nquads, :delete, nquads}
+    defp build_mutation(%{cond: condition} = mutation, :json, json_lib) do
+      condition_string =
+        with condition when is_binary(condition) and condition != "" <- condition do
+          ~s|"cond": #{json_lib.encode!(condition)}, |
+        end
+
+      mutations =
+        for {:json, operation, mutation} <- extract_mutations(mutation),
+            do: ~s|"#{operation}": #{mutation}|
+
+      ~s|#{condition_string}#{Enum.join(mutations, ", ")}|
+    end
+
+    @mutation_keys [
+      set_json: {:json, :set},
+      delete_json: {:json, :delete},
+      set_nquads: {:nquads, :set},
+      del_nquads: {:nquads, :delete}
+    ]
+    defp extract_mutations(mutation) do
+      Enum.flat_map(@mutation_keys, fn {key, {type, operation}} ->
+        case Map.get(mutation, key) do
+          "" -> []
+          value -> [{type, operation, value}]
+        end
+      end)
+    end
+
+    defp mutation_type(%{set_nquads: "", del_nquads: ""}), do: :json
+    defp mutation_type(%{set_json: "", delete_json: ""}), do: :nquads
 
     @impl true
-    def query(channel, %{start_ts: start_ts, vars: vars, query: query}, json_lib, opts) do
+    def query(channel, request, json_lib, opts) do
+      %{
+        start_ts: start_ts,
+        vars: vars,
+        query: query,
+        read_only: read_only,
+        best_effort: best_effort
+      } = request
+
       request = %Request{
         action: :query,
         start_ts: start_ts,
         json: json_lib,
         headers: content_type(:json),
-        body: json_lib.encode!(%{"variables" => vars, "query" => to_string(query)})
+        body: json_lib.encode!(%{"variables" => vars, "query" => to_string(query)}),
+        read_only: read_only,
+        best_effort: best_effort
       }
 
       handle_request(channel, request, opts)
@@ -125,16 +194,8 @@ if Code.ensure_loaded?(Mint.HTTP) do
     defp content_type(:nquads), do: [{"Content-Type", "application/rdf"}]
 
     defp handle_request(channel, request, opts) do
-      %Request{
-        action: action,
-        start_ts: start_ts,
-        commit_now: commit_now,
-        json: json_lib,
-        headers: headers,
-        body: request_body
-      } = request
-
-      path = build_path(action, start_ts, commit_now)
+      %Request{action: action, json: json_lib, headers: headers, body: request_body} = request
+      path = build_path(request)
 
       case post(channel, path, headers, request_body, opts[:timeout]) do
         {:ok, %{status: 200, body: response_body}, channel} ->
@@ -148,10 +209,22 @@ if Code.ensure_loaded?(Mint.HTTP) do
       end
     end
 
-    defp build_path(action, start_ts, commit_now) do
+    defp build_path(%Request{
+           action: action,
+           start_ts: start_ts,
+           commit_now: commit_now,
+           read_only: read_only,
+           best_effort: best_effort
+         }) do
       path = path(action)
 
-      opts = [{"startTs", start_ts, start_ts > 0}, {"commitNow", "true", commit_now}]
+      opts = [
+        {"startTs", start_ts, start_ts > 0},
+        {"commitNow", "true", commit_now},
+        {"ro", "true", read_only},
+        {"be", "true", best_effort}
+      ]
+
       opts = for {key, value, true} <- opts, do: "#{key}=#{value}"
       opts_string = Enum.join(opts, "&")
 

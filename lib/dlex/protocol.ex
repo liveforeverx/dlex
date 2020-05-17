@@ -10,6 +10,8 @@ defmodule Dlex.Protocol do
 
   defstruct [:adapter, :channel, :connected, :json, :opts, :txn_context, txn_aborted?: false]
 
+  @timeout 15_000
+
   @impl true
   def connect(opts) do
     host = Keyword.fetch!(opts, :hostname)
@@ -77,7 +79,7 @@ defmodule Dlex.Protocol do
   defp finish_txn(state, txn_result, opts) do
     %{adapter: adapter, channel: channel, json: json_lib, txn_context: txn_context} = state
     state = %{state | txn_context: nil}
-    timeout = Keyword.get(opts, :timeout, Keyword.get(state.opts, :timeout))
+    timeout = Keyword.get(opts, :timeout, @timeout)
     txn_context = %{txn_context | aborted: txn_result != :commit}
 
     case Adapter.commit_or_abort(adapter, channel, txn_context, json_lib, timeout: timeout) do
