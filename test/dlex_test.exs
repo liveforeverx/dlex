@@ -82,7 +82,7 @@ defmodule DlexTest do
   end
 
   test "mutation nquads", %{pid: pid} do
-    assert %{uids: %{"luke" => uid_luke, "leia" => uid_leia, "sw1" => uid_sw1}} =
+    assert %{uids: %{"luke" => uid_luke, "leia" => _uid_leia, "sw1" => _uid_sw1}} =
              Dlex.set!(pid, @mutation_nquads)
 
     assert %{"name" => "Luke Skywalker"} == uid_get(pid, uid_luke)
@@ -106,7 +106,7 @@ defmodule DlexTest do
       "dgraph.type" => "User"
     }
 
-    assert %{json: %{"uid" => uid}} = Dlex.set!(pid, json, return_json: true)
+    assert %{json: %{"uid" => _uid}} = Dlex.set!(pid, json, return_json: true)
 
     statement = "query all($id: int) {all(func: eq(indexed_id, $id)) {uid expand(_all_)}}"
 

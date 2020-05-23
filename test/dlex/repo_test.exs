@@ -32,7 +32,7 @@ defmodule Dlex.RepoTest do
       assert {:error, %Ecto.Changeset{valid?: false}} = TestRepo.set(invalid_changeset)
 
       valid_changeset = Ecto.Changeset.cast(%User{}, %{name: "Bernard", age: 20}, [:name, :age])
-      assert {:ok, %{uid: uid}} = TestRepo.set(valid_changeset)
+      assert {:ok, %{uid: _uid}} = TestRepo.set(valid_changeset)
     end
   end
 end
