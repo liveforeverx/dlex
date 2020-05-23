@@ -36,6 +36,32 @@ defmodule Api.Request.VarsEntry do
   field :value, 2, type: :string
 end
 
+defmodule Api.Metrics.NumUidsEntry do
+  @moduledoc false
+  use Protobuf, map: true, syntax: :proto3
+
+  @type t :: %__MODULE__{
+          key: String.t(),
+          value: non_neg_integer
+        }
+  defstruct [:key, :value]
+
+  field :key, 1, type: :string
+  field :value, 2, type: :uint64
+end
+
+defmodule Api.Metrics do
+  @moduledoc false
+  use Protobuf, syntax: :proto3
+
+  @type t :: %__MODULE__{
+          num_uids: %{String.t() => non_neg_integer}
+        }
+  defstruct [:num_uids]
+
+  field :num_uids, 1, repeated: true, type: Api.Metrics.NumUidsEntry, map: true
+end
+
 defmodule Api.Request do
   @moduledoc false
   use Protobuf, syntax: :proto3
@@ -74,6 +100,18 @@ defmodule Api.Response.UidsEntry do
   field :value, 2, type: :string
 end
 
+defmodule Api.Uids do
+  @moduledoc false
+  use Protobuf, syntax: :proto3
+
+  @type t :: %__MODULE__{
+          uids: [String.t()]
+        }
+  defstruct [:uids]
+
+  field :uids, 1, repeated: true, type: :string
+end
+
 defmodule Api.Response do
   @moduledoc false
   use Protobuf, syntax: :proto3
@@ -82,13 +120,15 @@ defmodule Api.Response do
           json: binary,
           txn: Api.TxnContext.t() | nil,
           latency: Api.Latency.t() | nil,
+          metrics: Api.Metrics.t() | nil,
           uids: %{String.t() => String.t()}
         }
-  defstruct [:json, :txn, :latency, :uids]
+  defstruct [:json, :txn, :latency, :metrics, :uids]
 
   field :json, 1, type: :bytes
   field :txn, 2, type: Api.TxnContext
   field :latency, 3, type: Api.Latency
+  field :metrics, 4, type: Api.Metrics
   field :uids, 12, repeated: true, type: Api.Response.UidsEntry, map: true
 end
 
@@ -198,14 +238,16 @@ defmodule Api.Latency do
           parsing_ns: non_neg_integer,
           processing_ns: non_neg_integer,
           encoding_ns: non_neg_integer,
-          assign_timestamp_ns: non_neg_integer
+          assign_timestamp_ns: non_neg_integer,
+          total_ns: non_neg_integer
         }
-  defstruct [:parsing_ns, :processing_ns, :encoding_ns, :assign_timestamp_ns]
+  defstruct [:parsing_ns, :processing_ns, :encoding_ns, :assign_timestamp_ns, :total_ns]
 
   field :parsing_ns, 1, type: :uint64
   field :processing_ns, 2, type: :uint64
   field :encoding_ns, 3, type: :uint64
   field :assign_timestamp_ns, 4, type: :uint64
+  field :total_ns, 5, type: :uint64
 end
 
 defmodule Api.NQuad do
@@ -241,7 +283,7 @@ defmodule Api.Value do
         }
   defstruct [:val]
 
-  oneof(:val, 0)
+  oneof :val, 0
   field :default_val, 1, type: :string, oneof: 0
   field :bytes_val, 2, type: :bytes, oneof: 0
   field :int_val, 3, type: :int64, oneof: 0
@@ -309,11 +351,11 @@ defmodule Api.Dgraph.Service do
   @moduledoc false
   use GRPC.Service, name: "api.Dgraph"
 
-  rpc(:Login, Api.LoginRequest, Api.Response)
-  rpc(:Query, Api.Request, Api.Response)
-  rpc(:Alter, Api.Operation, Api.Payload)
-  rpc(:CommitOrAbort, Api.TxnContext, Api.TxnContext)
-  rpc(:CheckVersion, Api.Check, Api.Version)
+  rpc :Login, Api.LoginRequest, Api.Response
+  rpc :Query, Api.Request, Api.Response
+  rpc :Alter, Api.Operation, Api.Payload
+  rpc :CommitOrAbort, Api.TxnContext, Api.TxnContext
+  rpc :CheckVersion, Api.Check, Api.Version
 end
 
 defmodule Api.Dgraph.Stub do
