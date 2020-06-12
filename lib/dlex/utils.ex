@@ -23,7 +23,7 @@ defmodule Dlex.Utils do
   end
 
   defp add_blank_ids(map, counter, uid_key) when is_map(map) do
-    if is_location?(map) do
+    if is_location?(map) or (Map.has_key?(map, :__struct__) and !Map.has_key?(map, :uid)) do
       {map, counter}
     else
       map = Map.update(map, uid_key, "_:#{counter}", &(&1 || "_:#{counter}"))

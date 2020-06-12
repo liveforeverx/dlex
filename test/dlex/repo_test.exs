@@ -1,7 +1,8 @@
 defmodule Dlex.RepoTest do
   use ExUnit.Case
 
-  alias Dlex.{TestHelper, TestRepo, User}
+  alias Ecto.Changeset
+  alias Dlex.{Geo, TestHelper, TestRepo, User}
 
   setup_all do
     {:ok, pid} = TestRepo.start_link(TestHelper.opts())
@@ -33,6 +34,16 @@ defmodule Dlex.RepoTest do
 
       valid_changeset = Ecto.Changeset.cast(%User{}, %{name: "Bernard", age: 20}, [:name, :age])
       assert {:ok, %{uid: _uid}} = TestRepo.set(valid_changeset)
+    end
+
+    test "using custom types" do
+      changes = %{name: "John", age: 30, location: %{lat: 15.5, lon: 10.2}}
+      changeset = Changeset.cast(%User{}, changes, [:name, :age, :location])
+
+      assert {:ok, %User{uid: uid, location: %Geo{lat: 15.5, lon: 10.2}}} =
+               TestRepo.mutate(changeset)
+
+      assert {:ok, %User{location: %Geo{lat: 15.5, lon: 10.2}}} = TestRepo.get(uid)
     end
   end
 end

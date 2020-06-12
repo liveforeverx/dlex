@@ -1,3 +1,19 @@
+# 0.5.1
+
+* fix and enhance support for custom ecto types (see example `Dlex.Geo` in tests)
+* fix a types diff not handled proparly in `Dlex.Repo` in alter_schema
+* enahnce decoding/encoding in `Dlex.Repo` to return errors
+* enhance `Repo.all` to accept query parameters.
+  To enable `Repo.all` automatically detect types and converts to types, please include at least `dgraph.type`.
+  Recommended query returns:
+
+    ```
+    uid
+    dgraph.type
+    expand(_all_)
+    ```
+
+
 # 0.5.0
 
 * enahnce `mutate` API to support multiple mutations and set and delete combined

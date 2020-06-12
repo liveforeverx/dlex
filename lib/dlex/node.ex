@@ -125,6 +125,8 @@ defmodule Dlex.Node do
         def __schema__(:type, unquote(name)), do: unquote(type)
       end
 
+      def __schema__(:type, _), do: nil
+
       for %Dlex.Field{name: name, db_name: db_name, type: type} <- @fields_data do
         def __schema__(:field, unquote(name)), do: unquote(db_name)
         def __schema__(:field, unquote(db_name)), do: {unquote(name), unquote(type)}
@@ -151,7 +153,7 @@ defmodule Dlex.Node do
       |> Enum.map(fn fdata ->
         %{
           "name" => fdata.db_name,
-          "type" => Atom.to_string(fdata.type)
+          "type" => db_type(fdata.type)
         }
       end)
 
@@ -237,11 +239,18 @@ defmodule Dlex.Node do
     string: "string",
     geo: "geo",
     datetime: "datetime",
-    uid: "uid"
+    uid: "[uid]"
   ]
 
   for {type, dgraph_type} <- @types_mapping do
-    defp db_type(unquote(type)), do: unquote(dgraph_type)
+    defp primitive_type(unquote(type)), do: unquote(dgraph_type)
+  end
+
+  @primitive_types Keyword.keys(@types_mapping)
+  def primitive_type?(type), do: type in @primitive_types
+
+  defp db_type(type) do
+    if primitive_type?(type), do: primitive_type(type), else: primitive_type(type.type)
   end
 
   @ignore_keys [:default, :depends_on]

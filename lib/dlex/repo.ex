@@ -10,7 +10,7 @@ defmodule Dlex.Repo do
       hostname: "localhost",
       port: 3306
   """
-  alias Dlex.{Repo.Meta, Utils}
+  alias Dlex.{Error, Node, Repo.Meta, Utils}
 
   @doc """
 
@@ -52,7 +52,7 @@ defmodule Dlex.Repo do
       def get(uid), do: Dlex.Repo.get(@name, meta(), uid)
       def get!(uid), do: Dlex.Repo.get!(@name, meta(), uid)
 
-      def all(query), do: Dlex.Repo.all(@name, query, meta())
+      def all(query, params \\ %{}), do: Dlex.Repo.all(@name, query, params, meta())
 
       def meta(), do: Dlex.Repo.Meta.get(@meta_name)
       def register(modules), do: Dlex.Repo.Meta.register(@meta_name, modules)
@@ -88,8 +88,8 @@ defmodule Dlex.Repo do
   Query all. It automatically tries to decode values inside of a query. To make it work, you
   need to expand the results it like this: `uid dgraph.type expand(_all_)`
   """
-  def all(conn, query, %{lookup: lookup} = _meta \\ %{lookup: %{}}) do
-    with {:ok, data} <- Dlex.query(conn, query), do: decode(data, lookup, false)
+  def all(conn, query, params, %{lookup: lookup} = _meta \\ %{lookup: %{}}) do
+    with {:ok, data} <- Dlex.query(conn, query, params), do: decode(data, lookup, false)
   end
 
   def set!(conn, data, opts), do: mutate!(conn, data, opts)
@@ -112,42 +112,80 @@ defmodule Dlex.Repo do
   @doc """
   Mutate data
   """
-  def mutate(_conn, %{__struct__: Ecto.Changeset, valid?: false} = struct, _opts),
-    do: {:error, struct}
+  def mutate(_conn, %{__struct__: Ecto.Changeset, valid?: false} = changeset, _opts),
+    do: {:error, changeset}
 
-  def mutate(conn, %{__struct__: Ecto.Changeset, valid?: true, changes: changes}, opts) do
-    mutate(conn, changes, opts)
+  def mutate(conn, %{__struct__: Ecto.Changeset, valid?: true} = changeset, opts) do
+    %{data: %{__struct__: struct} = data, changes: changes} = changeset
+
+    with {:ok, new_data} <-
+           mutate(conn, Map.merge(changes, %{__struct__: struct, uid: nil}), opts) do
+      {:ok, Map.merge(data, new_data)}
+    end
   end
 
   def mutate(conn, data, opts) do
     data_with_ids = Utils.add_blank_ids(data, :uid)
 
-    with {:ok, %{uids: ids_map}} <- Dlex.set(conn, %{}, encode(data_with_ids), opts) do
-      {:ok, Utils.replace_ids(data_with_ids, ids_map, :uid)}
+    case encode(data_with_ids) do
+      {:error, error} ->
+        {:error, %Error{action: :mutate, reason: error}}
+
+      encoded_data ->
+        with {:ok, %{uids: ids_map}} <- Dlex.set(conn, %{}, encoded_data, opts) do
+          {:ok, Utils.replace_ids(data_with_ids, ids_map, :uid)}
+        end
     end
   end
 
   def encode(%{__struct__: struct} = data) do
     data
     |> Map.from_struct()
-    |> Enum.flat_map(&encode_kv(&1, struct))
-    |> Map.new()
+    |> Map.to_list()
+    |> encode_kv(%{}, struct)
   end
 
-  def encode(data) when is_list(data), do: Enum.map(data, &encode/1)
+  def encode(data) when is_list(data), do: encode_list(data, [])
   def encode(data), do: data
 
-  defp encode_kv({_key, nil}, _), do: []
+  defp encode_kv([], map, _struct), do: map
+  defp encode_kv([{_key, nil} | kv], map, struct), do: encode_kv(kv, map, struct)
 
-  defp encode_kv({:uid, value}, struct), do: [{"uid", value}, {"dgraph.type", source(struct)}]
+  defp encode_kv([{:uid, value} | kv], map, struct) do
+    map = Map.merge(map, %{"uid" => value, "dgraph.type" => source(struct)})
+    encode_kv(kv, map, struct)
+  end
 
-  defp encode_kv({key, value}, struct) do
-    case field(struct, key) do
-      nil -> []
-      string_key -> [{string_key, encode(value)}]
+  defp encode_kv([{key, value} | kv], map, struct) do
+    {field_name, type} = {field(struct, key), type(struct, key)}
+
+    cond do
+      field_name == nil ->
+        encode_kv(kv, map, struct)
+
+      Node.primitive_type?(type) ->
+        map = Map.put(map, field_name, encode(value))
+        encode_kv(kv, map, struct)
+
+      true ->
+        case type.dump(value) do
+          {:ok, data} -> encode_kv(kv, Map.put(map, field_name, data), struct)
+          :error -> {:error, {:dump_error, key, type, value}}
+        end
     end
   end
 
+  defp encode_list([], list), do: Enum.reverse(list)
+
+  defp encode_list([value | values], list) do
+    case encode(value) do
+      {:error, error} -> {:error, error}
+      data -> encode_list(values, [data | list])
+    end
+  end
+
+  @compile {:inline, field: 2}
+  def type(struct, key), do: struct.__schema__(:type, key)
   @compile {:inline, field: 2}
   def field(_struct, "uid"), do: {:uid, :string}
   def field(struct, key), do: struct.__schema__(:field, key)
@@ -172,8 +210,12 @@ defmodule Dlex.Repo do
 
     with {:ok, %{"uid_get" => nodes}} <- Dlex.query(conn, statement) do
       case nodes do
-        [%{"uid" => _} = map] when map_size(map) <= 2 -> {:ok, nil}
-        [map] -> decode(map, lookup)
+        [%{"uid" => _} = map] when map_size(map) <= 2 ->
+          {:ok, nil}
+
+        [map] ->
+          with {:error, error} <- decode(map, lookup),
+               do: {:error, %Error{action: :get, reason: error}}
       end
     end
   end
@@ -182,9 +224,7 @@ defmodule Dlex.Repo do
   Decode resulting map to a structure.
   """
   def decode(map, lookup, strict? \\ true) do
-    {:ok, do_decode(map, lookup, strict?)}
-  catch
-    {:error, error} -> {:error, error}
+    with %{} = map <- do_decode(map, lookup, strict?), do: {:ok, map}
   end
 
   defp do_decode(map, lookup, strict?) when is_map(map) and is_map(lookup) do
@@ -194,11 +234,8 @@ defmodule Dlex.Repo do
     else
       _ ->
         cond do
-          strict? ->
-            {:error, {:untyped, map}}
-
-          true ->
-            for {key, values} <- map, into: %{}, do: {key, do_decode(values, lookup, strict?)}
+          strict? -> {:error, {:untyped, map}}
+          true -> do_decode_untyped_map(map, lookup)
         end
     end
   end
@@ -210,15 +247,34 @@ defmodule Dlex.Repo do
   defp do_decode(value, _lookup, _strict?), do: value
 
   defp do_decode_map(map, type, lookup, strict?) when is_map(map) and is_atom(type) do
-    Enum.reduce(map, type.__struct__(), fn {key, value}, struct ->
-      do_decode_field(struct, field(type, key), value, lookup, strict?)
+    Enum.reduce_while(map, type.__struct__(), fn {key, value}, struct ->
+      case do_decode_field(struct, field(type, key), value, lookup, strict?) do
+        {:error, error} -> {:halt, {:error, error}}
+        updated_struct -> {:cont, updated_struct}
+      end
+    end)
+  end
+
+  defp do_decode_untyped_map(map, lookup) do
+    Enum.reduce_while(map, %{}, fn {key, values}, acc ->
+      case do_decode(values, lookup, false) do
+        {:error, error} -> {:halt, {:error, error}}
+        values -> {:cont, Map.put(acc, key, values)}
+      end
     end)
   end
 
   defp do_decode_field(struct, {field_name, field_type}, value, lookup, strict?) do
-    case Ecto.Type.cast(field_type, value) do
-      {:ok, casted_value} -> Map.put(struct, field_name, do_decode(casted_value, lookup, strict?))
-      {:error, error} -> throw({:error, error})
+    case Ecto.Type.load(field_type, value) do
+      {:ok, loaded_value} ->
+        if Node.primitive_type?(field_type) do
+          Map.put(struct, field_name, do_decode(loaded_value, lookup, strict?))
+        else
+          Map.put(struct, field_name, loaded_value)
+        end
+
+      :error ->
+        {:error, {:load_error, field_name, field_type, value}}
     end
   end
 
@@ -239,7 +295,7 @@ defmodule Dlex.Repo do
   defp do_alter_schema(conn, %{"schema" => schema, "types" => types}, snapshot) do
     delta = %{
       "schema" => snapshot["schema"] -- schema,
-      "types" => snapshot["types"] -- types
+      "types" => delta_types(snapshot["types"], types)
     }
 
     delta_l = length(delta["schema"]) + length(delta["types"])
@@ -253,6 +309,29 @@ defmodule Dlex.Repo do
   defp do_alter_schema(conn, sch, snapshot) do
     do_alter_schema(conn, Map.put_new(sch, "types", []), snapshot)
   end
+
+  defp delta_types([], _existing_types), do: []
+
+  defp delta_types([type_spec | types], existing_types) do
+    if type_exist?(type_spec, existing_types) do
+      delta_types(types, existing_types)
+    else
+      [type_spec | delta_types(types, existing_types)]
+    end
+  end
+
+  defp type_exist?(%{"name" => name, "fields" => fields}, existing_types) do
+    case Enum.find(existing_types, &(Map.get(&1, "name") == name)) do
+      nil ->
+        false
+
+      %{"fields" => existing_fields} ->
+        MapSet.equal?(fields_set(fields), fields_set(existing_fields))
+    end
+  end
+
+  defp fields_set(fields),
+    do: fields |> Enum.map(fn %{"name" => name} -> name end) |> MapSet.new()
 
   @doc """
   Generate snapshot for running meta process
