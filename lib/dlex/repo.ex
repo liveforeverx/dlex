@@ -138,6 +138,7 @@ defmodule Dlex.Repo do
     end
   end
 
+  def encode(%DateTime{} = data), do: data
   def encode(%{__struct__: struct} = data) do
     data
     |> Map.from_struct()
@@ -147,6 +148,7 @@ defmodule Dlex.Repo do
 
   def encode(data) when is_list(data), do: encode_list(data, [])
   def encode(data), do: data
+
 
   defp encode_kv([], map, _struct), do: map
   defp encode_kv([{_key, nil} | kv], map, struct), do: encode_kv(kv, map, struct)
@@ -227,6 +229,8 @@ defmodule Dlex.Repo do
     with %{} = map <- do_decode(map, lookup, strict?), do: {:ok, map}
   end
 
+
+
   defp do_decode(map, lookup, strict?) when is_map(map) and is_map(lookup) do
     with %{"dgraph.type" => [type_string]} <- map,
          type when type != nil <- Map.get(lookup, type_string) do
@@ -262,6 +266,11 @@ defmodule Dlex.Repo do
         values -> {:cont, Map.put(acc, key, values)}
       end
     end)
+  end
+
+  defp do_decode_field(struct, {field_name, :utc_datetime}, value, lookup, strict?) when not is_struct(value) do
+    {:ok, new_value} = Calendar.DateTime.Parse.rfc3339_utc(value)
+    do_decode_field(struct, {field_name, :utc_datetime}, new_value, lookup, strict?)
   end
 
   defp do_decode_field(struct, {field_name, field_type}, value, lookup, strict?) do

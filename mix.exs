@@ -30,6 +30,7 @@ defmodule Dlex.MixProject do
     [
       {:db_connection, "~> 2.1"},
       {:grpc, "~> 0.3.1"},
+      {:calendar, "~> 1.0.0"},
       {:jason, "~> 1.0", optional: true},
       {:mint, "~> 1.0", optional: true},
       {:castore, "~> 0.1.4", optional: true},

@@ -48,6 +48,7 @@ defmodule Dlex.User do
     field :age, :integer
     field :friends, :uid
     field :location, Dlex.Geo
+    field :modified, :utc_datetime
     field :cache, :any, virtual: true
   end
 end

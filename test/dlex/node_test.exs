@@ -8,7 +8,7 @@ defmodule Dlex.NodeTest do
       assert "user" == User.__schema__(:source)
       assert :string == User.__schema__(:type, :name)
       assert :integer == User.__schema__(:type, :age)
-      assert [:name, :age, :friends, :location] == User.__schema__(:fields)
+      assert [:name, :age, :friends, :location, :modified] == User.__schema__(:fields)
     end
 
     test "alter" do
@@ -22,11 +22,13 @@ defmodule Dlex.NodeTest do
                  },
                  %{"predicate" => "user.age", "type" => "int"},
                  %{"predicate" => "user.friends", "type" => "[uid]"},
-                 %{"predicate" => "user.location", "type" => "geo"}
+                 %{"predicate" => "user.location", "type" => "geo"},
+                 %{"predicate" => "user.modified", "type" => "datetime"}
                ],
                "types" => [
                  %{
                    "fields" => [
+                     %{"name" => "user.modified", "type" => "datetime"},
                      %{"name" => "user.location", "type" => "geo"},
                      %{"name" => "user.friends", "type" => "[uid]"},
                      %{"name" => "user.age", "type" => "int"},

@@ -36,6 +36,14 @@ defmodule Dlex.RepoTest do
       assert {:ok, %{uid: _uid}} = TestRepo.set(valid_changeset)
     end
 
+    test "setting datetime field in Changeset" do
+      now = DateTime.utc_now()
+      changeset = Ecto.Changeset.cast(%User{}, %{name: "TimeTraveler", age: 20, modified: now}, [:name, :age, :modified])
+      assert {:ok, %{uid: uid}} = TestRepo.set(changeset)
+
+      assert {:ok, %User{name: "TimeTraveler", age: 20, modified: now}} = TestRepo.get(uid)
+    end
+
     test "using custom types" do
       changes = %{name: "John", age: 30, location: %{lat: 15.5, lon: 10.2}}
       changeset = Changeset.cast(%User{}, changes, [:name, :age, :location])
