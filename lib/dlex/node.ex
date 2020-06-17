@@ -238,7 +238,7 @@ defmodule Dlex.Node do
     float: "float",
     string: "string",
     geo: "geo",
-    datetime: "datetime",
+    utc_datetime: "datetime",
     uid: "[uid]"
   ]
 
