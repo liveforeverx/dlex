@@ -35,8 +35,11 @@ defmodule Dlex.RepoTest do
       valid_changeset = Ecto.Changeset.cast(%User{}, %{name: "Bernard", age: 20}, [:name, :age])
       assert {:ok, %{uid: uid2}} = TestRepo.set(valid_changeset)
 
+      assert uid != nil
       assert uid2 != nil
-      assert {:ok, %{queries: %{}, uids: %{}}} = TestRepo.delete(%{uid: uid2})
+      assert {:ok, %{queries: %{}, uids: %{}}} = TestRepo.delete(%{uid: uid})
+      assert {:ok, nil} = TestRepo.get(uid)
+      assert %{queries: %{}, uids: %{}} = TestRepo.delete!(%{uid: uid2})
       assert {:ok, nil} = TestRepo.get(uid2)
     end
 
