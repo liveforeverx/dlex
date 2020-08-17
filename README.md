@@ -21,7 +21,7 @@ Preferred and more performant option is to use `grpc`:
 def deps do
   [
     {:jason, "~> 1.0"},
-    {:dlex, "~> 0.1.0"}
+    {:dlex, "~> 0.5.0"}
   ]
 end
 ```
@@ -34,7 +34,7 @@ def deps do
     {:jason, "~> 1.0"},
     {:castore, "~> 0.1.0", optional: true},
     {:mint, github: "ericmj/mint", branch: "master"},
-    {:dlex, "~> 0.1.0"}
+    {:dlex, "~> 0.5.0"}
   ]
 end
 ```

@@ -49,6 +49,9 @@ defmodule Dlex.Repo do
       def mutate(node, opts \\ []), do: Dlex.Repo.mutate(@name, node, opts)
       def mutate!(node, opts \\ []), do: Dlex.Repo.mutate!(@name, node, opts)
 
+      def delete(node, opts \\ []), do: Dlex.Repo.delete(@name, node, opts)
+      def delete!(node, opts \\ []), do: Dlex.Repo.delete!(@name, node, opts)
+
       def get(uid), do: Dlex.Repo.get(@name, meta(), uid)
       def get!(uid), do: Dlex.Repo.get!(@name, meta(), uid)
 
@@ -110,7 +113,7 @@ defmodule Dlex.Repo do
   end
 
   @doc """
-  Mutate data
+  Mutate data.
   """
   def mutate(_conn, %{__struct__: Ecto.Changeset, valid?: false} = changeset, _opts),
     do: {:error, changeset}
@@ -135,6 +138,29 @@ defmodule Dlex.Repo do
         with {:ok, %{uids: ids_map}} <- Dlex.set(conn, %{}, encoded_data, opts) do
           {:ok, Utils.replace_ids(data_with_ids, ids_map, :uid)}
         end
+    end
+  end
+
+  @doc """
+  Delete data.
+  """
+  def delete(conn, data, _opts) do
+    case encode(data) do
+      {:error, error} ->
+        {:error, %Error{action: :mutate, reason: error}}
+
+      encoded_data ->
+        Dlex.delete(conn, encoded_data)
+    end
+  end
+
+  @doc """
+  The same as `delete/2`, but return result of sucessful operation or raises.
+  """
+  def delete!(conn, data, opts) do
+    case delete(conn, data, opts) do
+      {:ok, result} -> result
+      {:error, error} -> raise error
     end
   end
 
